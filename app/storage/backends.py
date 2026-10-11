@@ -22,6 +22,7 @@ class MemoryBackend:
 
     def __init__(self, settings):
         self.settings = settings
+        self.records_factory = None
 
     def read(self, ast, parameters, scope) -> Execution:
         # Per-query ephemeral database contains only authorized rows.
@@ -29,7 +30,9 @@ class MemoryBackend:
         try:
             Base.metadata.create_all(engine)
             with engine.begin() as connection:
-                records = scoped_records(scope)
+                records = scoped_records(
+                    scope, self.records_factory() if self.records_factory else None
+                )
                 for table in Base.metadata.sorted_tables:
                     if records[table.name]:
                         connection.execute(table.insert(), records[table.name])

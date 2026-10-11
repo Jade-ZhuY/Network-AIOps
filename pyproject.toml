@@ -1,7 +1,7 @@
 [project]
 name = "network-aiops"
-version = "0.1.0"
-description = "Four-agent network operations assistant, development steps 1–8"
+version = "0.2.0"
+description = "Four-agent network operations assistant with durable authorized sessions"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.115,<1",

@@ -13,6 +13,10 @@ class SessionBusy(RuntimeError):
     pass
 
 
+class RequestCapacity(RuntimeError):
+    pass
+
+
 def serialize(row):
     return {
         key: value.isoformat() if isinstance(value, datetime) else value

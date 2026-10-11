@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Network AIOps · 网络运行工作台</title>
+  <link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="Network AIOps 首页"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 25V7l22 18V7"/><circle cx="5" cy="7" r="3"/><circle cx="27" cy="25" r="3"/></svg><span>NETWORK<br><b>AIOps</b></span></a>
+    <div class="workspace-label">WORKSPACE / 01</div>
+    <nav aria-label="主导航"><button class="nav-button active" data-view="chat"><span>◈</span> 智能调查 <small>01</small></button><button class="nav-button" data-view="knowledge"><span>▤</span> 知识资料 <small>02</small></button><button class="nav-button admin-only hidden" data-view="audit"><span>⌁</span> 执行审计 <small>03</small></button></nav>
+    <div class="session-heading"><span>调查会话</span><button id="new-session" aria-label="新建调查会话">＋</button></div>
+    <div id="sessions" class="sessions" aria-label="会话列表"><p class="sidebar-muted">登录后加载会话</p></div>
+    <div class="sidebar-bottom"><div class="avatar">NO</div><div><b id="identity">尚未登录</b><span id="identity-role">本地运行工作台</span></div><button id="logout" aria-label="退出登录">↗</button></div>
+  </aside>
+  <main>
+    <header class="topbar"><div class="breadcrumb">运行工作台 <span>/</span> <b id="page-label">智能调查</b></div><div class="health"><span class="status-dot" id="health-dot"></span><span id="health-text">检查服务中</span><span class="demo-badge">演示数据</span></div></header>
+    <section id="chat-view" class="view active-view">
+      <div class="investigation">
+        <div class="intro-header"><div><div class="eyebrow">EVIDENCE FIRST. ALWAYS.</div><h1>让网络问题，<br>有据可循。</h1><p>从知识到数据，再到可核查的故障判断。<br>四个 Agent 协同，每一步保留依据。</p></div><div class="orbit" aria-hidden="true"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="72"/><circle cx="90" cy="90" r="43"/><path d="M18 90h144M90 18v144M39 39l102 102M39 141l102-102"/><circle class="node" cx="90" cy="18" r="5"/><circle class="node" cx="162" cy="90" r="5"/><circle class="node" cx="90" cy="162" r="5"/><circle class="node" cx="18" cy="90" r="5"/><rect x="76" y="76" width="28" height="28" rx="5"/></svg><span>FOUR AGENTS<br>ONE EVIDENCE CHAIN</span></div></div>
+        <div class="system-strip"><div><span>模型</span><b id="model-label">待连接</b></div><div><span>业务数据</span><b id="data-label">—</b></div><div><span>会话状态</span><b id="memory-label">—</b></div></div>
+        <div id="welcome" class="welcome"><div class="section-label">START AN INVESTIGATION <span>选择一个问题开始</span></div><div class="suggestions"><button data-question="R2 昨天下午 BGP 邻居频繁断连，结合接口丢包率和告警分析可能原因。"><span class="case-id">INC-BGP-001</span><b>BGP 邻居为何断连？</b><span>结合接口指标与协议知识 <i>↗</i></span></button><button data-question="查询 R2 昨天有多少严重告警，eth1 的平均丢包率是多少？"><span class="case-id">DATA / SQL</span><b>查询告警与丢包指标</b><span>明确统计口径和时间窗口 <i>↗</i></span></button><button data-question="OSPF 为什么使用链路状态数据库？与 RIP 的收敛机制有什么区别？"><span class="case-id">KNOWLEDGE / RAG</span><b>OSPF 与 RIP 的区别</b><span>查阅协议笔记与来源 <i>↗</i></span></button></div><div class="scope-note"><span>✓</span> 只读查询 <span>✓</span> 服务端权限校验 <span>✓</span> 结论附带证据</div></div>
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <div id="pending" class="pending hidden" role="status"><span class="spinner"></span><div><b>正在执行本次调查</b><p>检索与查询结束后，将展示实际执行轨迹。不会自动修改网络配置。</p></div></div>
+        <form id="chat-form" class="composer"><label for="question" class="sr-only">输入网络调查问题</label><textarea id="question" placeholder="输入问题，例如：分析 R2 昨天下午的 BGP 断连原因…" rows="2" maxlength="4000" required></textarea><div class="composer-tools"><span>↳ <select id="timezone" aria-label="问题时间解析时区"><option value="Asia/Shanghai">Asia/Shanghai · UTC+8</option><option value="UTC">UTC</option></select><span class="composer-hint">Enter 发送 · Shift+Enter 换行</span></span><button id="send" type="submit">开始调查 <span>↗</span></button></div></form><p class="footer-note">当前为固定日期的演示网络数据。原因假设需人工核查，不代替现场诊断。</p>
+      </div>
+      <aside class="evidence-panel"><div class="panel-heading"><div><span class="eyebrow">INVESTIGATION DETAIL</span><h2>证据与执行</h2></div><span class="panel-symbol">↗</span></div><div class="panel-tabs" role="tablist"><button class="selected" id="evidence-tab" role="tab" aria-selected="true">证据来源 <span id="evidence-count">0</span></button><button id="trace-tab" role="tab" aria-selected="false">执行轨迹</button></div><div id="evidence-content" class="panel-content"><div class="empty-panel"><div class="empty-cross">＋</div><b>每个结论，都有出处</b><p>完成调查后，在这里查看实际引用的文档、SQL 结果、统计口径及耗时。</p></div></div><div id="trace-content" class="panel-content hidden"></div></aside>
+    </section>
+    <section id="knowledge-view" class="view management-view hidden"><div class="management-header"><div class="eyebrow">KNOWLEDGE LIBRARY</div><h1>把经验，变成证据。</h1><p>资料按业务范围隔离；展示真实章节、文档版本和解析状态。</p></div><div class="knowledge-actions admin-only hidden"><label class="upload-button" for="upload-file">＋ 上传 Markdown / TXT / PDF</label><input type="file" id="upload-file" accept=".md,.txt,.pdf" class="sr-only"><button id="reindex">重建内存索引</button><span>单文件 ≤ 10 MB</span></div><div id="documents" class="document-grid"></div></section>
+    <section id="audit-view" class="view management-view hidden"><div class="management-header"><div class="eyebrow">EXECUTION AUDIT</div><h1>让每次执行，可追溯。</h1><p>记录路由、结果状态及请求 ID；敏感凭据不进入轨迹。</p></div><button id="refresh-audit">刷新记录 ↻</button><div id="audit-table" class="audit-table"></div></section>
+  </main>
+  <dialog id="login-dialog"><form id="login-form"><span class="eyebrow">CONNECT YOUR WORKSPACE</span><h2>进入网络运行工作台</h2><p>使用本地配置中的 API_AUTH_TOKEN；管理员使用 API_ADMIN_TOKEN。模型 API Key 不是登录令牌。</p><label for="login-token">访问令牌</label><input id="login-token" type="password" autocomplete="off" required placeholder="粘贴本地访问令牌"><p id="login-error" class="error-message" role="alert"></p><button type="submit">连接工作台 ↗</button><small>令牌只保存在当前浏览器会话中，不写入页面源码。</small></form></dialog>
+  <div id="toast" class="toast hidden" role="alert"></div>
+</body>
+</html>

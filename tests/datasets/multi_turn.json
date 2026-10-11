@@ -1,0 +1,182 @@
+[
+  {
+    "case_id": "multi_00",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_01",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R4 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R4"
+  },
+  {
+    "case_id": "multi_02",
+    "questions": [
+      "查询昨天 R3 的告警",
+      "那同一时间 R2 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R2"
+  },
+  {
+    "case_id": "multi_03",
+    "questions": [
+      "查询昨天 R4 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_04",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_05",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R4 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R4"
+  },
+  {
+    "case_id": "multi_06",
+    "questions": [
+      "查询昨天 R3 的告警",
+      "那同一时间 R2 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R2"
+  },
+  {
+    "case_id": "multi_07",
+    "questions": [
+      "查询昨天 R4 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_08",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_09",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R4 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R4"
+  },
+  {
+    "case_id": "multi_10",
+    "questions": [
+      "查询昨天 R3 的告警",
+      "那同一时间 R2 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R2"
+  },
+  {
+    "case_id": "multi_11",
+    "questions": [
+      "查询昨天 R4 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_12",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_13",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R4 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R4"
+  },
+  {
+    "case_id": "multi_14",
+    "questions": [
+      "查询昨天 R3 的告警",
+      "那同一时间 R2 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R2"
+  },
+  {
+    "case_id": "multi_15",
+    "questions": [
+      "查询昨天 R4 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_16",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  },
+  {
+    "case_id": "multi_17",
+    "questions": [
+      "查询昨天 R2 的告警",
+      "那同一时间 R4 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R4"
+  },
+  {
+    "case_id": "multi_18",
+    "questions": [
+      "查询昨天 R3 的告警",
+      "那同一时间 R2 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R2"
+  },
+  {
+    "case_id": "multi_19",
+    "questions": [
+      "查询昨天 R4 的告警",
+      "那同一时间 R3 呢？",
+      "那丢包率呢？"
+    ],
+    "expected_final_device": "R3"
+  }
+]

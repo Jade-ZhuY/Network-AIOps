@@ -13,7 +13,7 @@ from app.rag.management import KnowledgeManager
 from app.schemas.models import AnalyzeRequest, ChatRequest, Scope, SessionCreate
 from app.security.auth import Principal, admin_principal, current_principal
 from app.storage.checkpoint import postgres_resources
-from app.storage.sessions import MemorySessions, PostgresSessions, SessionBusy, SessionMissing
+from app.storage.sessions import MemorySessions, PostgresSessions, RequestCapacity, SessionBusy, SessionMissing
 
 User = Annotated[Principal, Depends(current_principal)]
 Admin = Annotated[Principal, Depends(admin_principal)]
@@ -93,8 +93,13 @@ def create_app(settings: Settings | None = None):
                 "checkpoint": settings.persistence_backend,
                 "database": settings.data_backend,
                 "llm": settings.llm_mode,
+                "model": settings.llm_model
+                if settings.llm_mode == "openai"
+                else "deterministic-mock",
                 "llm_readiness": "offline_mock"
                 if settings.llm_mode == "mock"
+                else "verified_this_process"
+                if service.runtime.last_model_ok_at
                 else "configured_not_probed",
                 "embedding": settings.embedding_mode,
                 "data_kind": "demo",
@@ -118,6 +123,10 @@ def create_app(settings: Settings | None = None):
             status_code=409,
             content={"detail": "Session has an active request; retry after completion"},
         )
+
+    @api.exception_handler(RequestCapacity)
+    async def capacity(request, exc):
+        return JSONResponse(status_code=429, content={"detail": "Investigation concurrency limit reached"}, headers={"Retry-After": "2"})
 
     if settings.persistence_backend != "none":
 
@@ -160,7 +169,7 @@ def create_app(settings: Settings | None = None):
                 return await api.state.service.chat(
                     principal, request.session_id, request.message, request.timezone
                 )
-            except (SessionMissing, SessionBusy):
+            except (SessionMissing, SessionBusy, RequestCapacity):
                 raise
             except Exception as exc:
                 # Persistence failure never returns a fake successful saved response.

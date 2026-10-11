@@ -128,8 +128,8 @@ def demo_records() -> dict[str, list[dict]]:
     }
 
 
-def scoped_records(scope) -> dict[str, list[dict]]:
-    records = demo_records()
+def scoped_records(scope, records=None) -> dict[str, list[dict]]:
+    records = records if records is not None else demo_records()
     ids = {
         d["device_id"]
         for d in records["network_devices"]

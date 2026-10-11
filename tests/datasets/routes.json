@@ -1,0 +1,302 @@
+[
+  {
+    "case_id": "route_rag_00",
+    "question": "OSPF 为什么使用链路状态数据库？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_01",
+    "question": "OSPF 与 RIP 收敛机制有什么区别？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_02",
+    "question": "BGP 邻居 Down 的排查方法是什么？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_03",
+    "question": "解释 BGP 协议原理",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_04",
+    "question": "RIP 距离向量如何工作？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_05",
+    "question": "什么是 OSPF LSDB？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_06",
+    "question": "BGP Hold Timer 有什么作用？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_07",
+    "question": "如何只读核查 BGP TCP 连通性？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_08",
+    "question": "OSPF MTU 不匹配怎么排查？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_09",
+    "question": "拥塞与高 RTT 的关系是什么？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_10",
+    "question": "利用率百分比指标口径是什么？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_11",
+    "question": "链路丢包与物理故障怎么区分？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_12",
+    "question": "只讲 R2 的 BGP 协议原理，不查询现场数据",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_13",
+    "question": "如何核对 OSPF Hello 与 Dead 参数？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_14",
+    "question": "RIP 跳数度量是什么？",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_15",
+    "question": "Explain how OSPF works",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_16",
+    "question": "What is BGP hold timer?",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_17",
+    "question": "Explain the difference between OSPF and RIP",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_18",
+    "question": "BGP troubleshooting principles",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_rag_19",
+    "question": "How does interface loss affect BGP?",
+    "expected_route": "rag"
+  },
+  {
+    "case_id": "route_sql_00",
+    "question": "查询 R2 昨天有多少严重告警",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_01",
+    "question": "查询R2昨天eth1的平均丢包率",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_02",
+    "question": "查询 R3 昨天告警事件",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_03",
+    "question": "查询 R4 昨天下午利用率",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_04",
+    "question": "查询 R2 最近 24 小时 RTT",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_05",
+    "question": "查询 R2 在2026-10-10的丢包率",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_06",
+    "question": "查询 R1 昨天平均时延",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_07",
+    "question": "查询 R4 昨天平均流量利用率",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_08",
+    "question": "查询 R2 设备状态",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_09",
+    "question": "查询所有设备状态",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_10",
+    "question": "统计 R2 昨天下午告警数量",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_11",
+    "question": "查询 R3 昨天下午接口丢包率",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_12",
+    "question": "查询 R4 昨天 eth1 时延",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_13",
+    "question": "查询 R1 最近24小时利用率",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_14",
+    "question": "Query R2 alarms yesterday",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_15",
+    "question": "Query R4 average latency yesterday",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_16",
+    "question": "Query R2 device status",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_17",
+    "question": "Query R3 packet loss yesterday",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_18",
+    "question": "查询 R2 昨天告警及丢包率",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_sql_19",
+    "question": "查询全网昨天告警",
+    "expected_route": "sql"
+  },
+  {
+    "case_id": "route_both_00",
+    "question": "分析 R2 昨天下午 BGP 断连原因",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_01",
+    "question": "R3 昨天 OSPF 邻居无法建立，为什么？",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_02",
+    "question": "R4 昨天利用率与 RTT 高，分析原因",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_03",
+    "question": "分析R2昨天BGP丢包告警原因",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_04",
+    "question": "R2 最近24小时 BGP 邻居为何断开？",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_05",
+    "question": "R3 昨天下午 OSPF 可能有什么问题？原因分析",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_06",
+    "question": "分析 R4 昨天下午流量异常原因",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_07",
+    "question": "分析 R2 在2026-10-10发生的 BGP 断连原因",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_08",
+    "question": "R4 昨天链路拥塞的原因是什么？",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_09",
+    "question": "比较 R2 和 R3 昨天告警与丢包，哪个更异常？",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_10",
+    "question": "Why did R2 BGP fail yesterday?",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_11",
+    "question": "Analyze R3 OSPF alarms yesterday",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_12",
+    "question": "Diagnose R4 traffic latency yesterday",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_13",
+    "question": "R2 昨天 RTT 增高可能是什么原因？",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_14",
+    "question": "R3 最近 24 小时邻接故障原因分析",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_15",
+    "question": "R4 最近 24 小时利用率高，为何？",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_16",
+    "question": "R2 昨天严重告警与丢包有什么可能原因？",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_17",
+    "question": "分析 R3 昨天 OSPF 参数不匹配的可能性",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_18",
+    "question": "分析 R4 昨天下午 RTT 与丢包相关原因",
+    "expected_route": "both"
+  },
+  {
+    "case_id": "route_both_19",
+    "question": "R2 昨天 BGP 告警为何频繁出现？",
+    "expected_route": "both"
+  }
+]

@@ -15,7 +15,7 @@ MUTATION = re.compile(
 def resolve_window(question: str, now: datetime, timezone: str):
     zone = ZoneInfo(timezone)
     local_now = now.astimezone(zone)
-    dates = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", question)
+    dates = re.findall(r"(?<![0-9])\d{4}-\d{2}-\d{2}(?![0-9])", question)
     if dates:
         start_day = datetime.strptime(dates[0], "%Y-%m-%d").date()
         end_day = (
@@ -57,11 +57,11 @@ def build_route_plan(
     lower = q.lower()
     history = (history or [])[-6:]
     previous = None
-    for prior in history:
-        candidate = build_route_plan(prior, now, timezone)
+    for index, prior in enumerate(history):
+        candidate = build_route_plan(prior, now, timezone, history[:index])
         if candidate.query_plan and not candidate.needs_clarification:
             previous = candidate
-    devices = list(dict.fromkeys(re.findall(r"\bR\d+\b", q.upper())))
+    devices = list(dict.fromkeys(re.findall(r"(?<![A-Z0-9])R\d+(?![A-Z0-9])", q.upper())))
     followup = any(
         term in q for term in ("同一时间", "同样", "那", "两台", "它", "呢", "比较")
     ) or any(term in lower for term in ("same time", "what about", "compare"))
@@ -99,9 +99,23 @@ def build_route_plan(
     )
     causal = any(
         term in lower
-        for term in ("分析", "原因", "为何", "为什么", "diagnos", "cause", "why", "compare", "比较")
+        for term in (
+            "分析",
+            "原因",
+            "为何",
+            "为什么",
+            "analy",
+            "diagnos",
+            "cause",
+            "why",
+            "compare",
+            "比较",
+        )
     )
-    if knowledge and not devices:
+    explicit_knowledge = any(
+        term in q for term in ("只讲", "只问", "仅解释", "不查询现场", "只解释")
+    )
+    if knowledge and (not devices or explicit_knowledge):
         route = "rag"
     elif MUTATION.search(q):
         route = "sql"
@@ -123,10 +137,16 @@ def build_route_plan(
         devices = inherited.devices
     if "两台" in q or "比较" in q or "compare" in lower:
         devices = (
-            list(dict.fromkeys(re.findall(r"\bR\d+\b", " ".join(history[-2:] + [q]).upper())))
+            list(
+                dict.fromkeys(
+                    re.findall(
+                        r"(?<![A-Z0-9])R\d+(?![A-Z0-9])", " ".join(history[-2:] + [q]).upper()
+                    )
+                )
+            )
             or devices
         )
-    interface_match = re.search(r"\beth\d+\b", lower)
+    interface_match = re.search(r"(?<![a-z0-9])eth\d+(?![a-z0-9])", lower)
     interface = (
         interface_match.group() if interface_match else inherited.interface if inherited else None
     )

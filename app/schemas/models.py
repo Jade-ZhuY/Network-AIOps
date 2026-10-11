@@ -3,6 +3,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.security.redaction import redact_sensitive_text
 
 Route = Literal["rag", "sql", "both"]
 Metric = Literal[
@@ -176,6 +177,14 @@ class SessionCreate(BaseModel):
     title: str = Field(default="新调查", min_length=1, max_length=100)
     timezone: str = "Asia/Shanghai"
 
+    @field_validator("title")
+    @classmethod
+    def title_text(cls, value):
+        value = redact_sensitive_text(value.strip())
+        if not value:
+            raise ValueError("Title is empty")
+        return value
+
     @field_validator("timezone")
     @classmethod
     def valid_timezone(cls, value):
@@ -184,6 +193,11 @@ class SessionCreate(BaseModel):
 
 class BusinessCompletion(BaseModel):
     completed: bool
+
+
+class SupervisorDecision(BaseModel):
+    route: Route
+    needs_clarification: bool
 
 
 class ReportDecision(BaseModel):

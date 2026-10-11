@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.rag.hybrid_retrieval import HybridRetriever
 from app.rag.ingestion import load_documents, parse_document
 from app.storage.documents import DocumentStore
+from app.security.redaction import redact_sensitive_text
 
 
 class KnowledgeManager:
@@ -101,7 +102,7 @@ class KnowledgeManager:
             doc_id=doc_id,
             tenant_id=principal.scope.tenant_id,
             owner_id=principal.user_id,
-            title=title or Path(filename).stem[:100],
+            title=redact_sensitive_text(title or Path(filename).stem[:100]),
             filename=stored_filename,
             access_scope=sorted(self.groups(principal)),
             status="indexing",

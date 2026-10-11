@@ -6,6 +6,8 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
+from app.security.redaction import redact_sensitive_text
+
 
 @dataclass(frozen=True)
 class Chunk:
@@ -50,7 +52,7 @@ def parse_document(path: Path, metadata: dict, chunk_size=700, overlap=100) -> l
         raise ValueError("Supported document formats: Markdown, UTF-8 text, PDF")
     chunks = []
     for section, page, content in pieces:
-        content = content.strip()
+        content = redact_sensitive_text(content.strip())
         if not content:
             continue
         for start in range(0, len(content), chunk_size - overlap):
@@ -60,7 +62,7 @@ def parse_document(path: Path, metadata: dict, chunk_size=700, overlap=100) -> l
                 Chunk(
                     chunk_id=f"{metadata['doc_id']}:{hashlib.sha256(identity.encode()).hexdigest()[:16]}",
                     doc_id=metadata["doc_id"],
-                    title=metadata["title"],
+                    title=redact_sensitive_text(metadata["title"]),
                     section=section,
                     page=page,
                     source=str(path.resolve()),

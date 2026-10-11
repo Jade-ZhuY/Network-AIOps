@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ROOT / ".env", extra="ignore", hide_input_in_errors=True
+    )
 
     environment: Literal["development", "test", "production"] = "development"
     llm_mode: Literal["mock", "openai"] = "mock"
@@ -22,6 +24,8 @@ class Settings(BaseSettings):
     llm_model: str = "replace-with-served-model-id"
     llm_api_key: SecretStr = SecretStr("EMPTY")
     llm_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    llm_reasoning_effort: Literal["low", "high", "max"] | None = None
+    dependency_host_override: str = ""
     agent_timeout_seconds: float = Field(default=35, gt=0, le=180)
     agent_recursion_limit: int = Field(default=16, ge=4, le=32)
     mysql_readonly_uri: SecretStr = SecretStr("")
@@ -41,6 +45,7 @@ class Settings(BaseSettings):
     enable_demo_api: bool = True
     retention_days: int = Field(default=30, ge=1, le=365)
     request_timeout_seconds: float = Field(default=180, gt=0, le=600)
+    max_concurrent_requests: int = Field(default=4, ge=1, le=32)
     upload_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, le=20 * 1024 * 1024)
 
     @field_validator("default_timezone")
@@ -58,6 +63,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def required_live_configuration(self):
+        if self.dependency_host_override:
+            if self.dependency_host_override not in ("host.docker.internal", "localhost"):
+                raise ValueError("Unsupported dependency host override")
+            for field in ("checkpoint_postgres_uri", "mysql_readonly_uri"):
+                value = (
+                    getattr(self, field)
+                    .get_secret_value()
+                    .replace("@127.0.0.1:", f"@{self.dependency_host_override}:")
+                )
+                setattr(self, field, SecretStr(value))
         if self.llm_mode == "openai" and self.llm_model == "replace-with-served-model-id":
             raise ValueError("Set LLM_MODEL before enabling openai mode")
         if self.data_backend == "mysql" and not self.mysql_readonly_uri.get_secret_value():

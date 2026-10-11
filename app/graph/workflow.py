@@ -14,6 +14,7 @@ from app.rag.ingestion import load_documents
 from app.schemas.context import InvocationContext
 from app.schemas.models import NetworkReport, QueryPlan, RagResult, RoutePlan, Scope, SqlResult
 from app.schemas.state import NetworkState
+from app.security.redaction import redact_sensitive_text
 from app.storage.backends import MemoryBackend, MySQLBackend
 from app.tools.sql_readonly import QueryService
 
@@ -176,6 +177,7 @@ class WorkflowService:
     def __init__(self, settings: Settings | None = None, checkpointer=None, sessions=None):
         self.settings = settings or Settings()
         self.sessions = sessions
+        self.request_slots = asyncio.Semaphore(self.settings.max_concurrent_requests)
         self.backend = (
             MemoryBackend(self.settings)
             if self.settings.data_backend == "mock"
@@ -201,6 +203,8 @@ class WorkflowService:
         scope: Scope | None = None,
         history: list[str] | None = None,
     ):
+        question = redact_sensitive_text(question)
+        history = [redact_sensitive_text(item) for item in history] if history else None
         request_id = f"req_{uuid4().hex}"
         trace = RequestTrace(trace_id=f"trace_{uuid4().hex}")
         messages = [{"role": "user", "content": q} for q in (history or [])[-6:] + [question]]
@@ -245,6 +249,19 @@ class WorkflowService:
         }
 
     async def chat(self, principal, session_id, question, timezone):
+        from app.storage.sessions import RequestCapacity
+
+        try:
+            await asyncio.wait_for(self.request_slots.acquire(), timeout=1)
+        except TimeoutError:
+            raise RequestCapacity from None
+        try:
+            return await self._chat(principal, session_id, question, timezone)
+        finally:
+            self.request_slots.release()
+
+    async def _chat(self, principal, session_id, question, timezone):
+        question = redact_sensitive_text(question)
         if self.sessions is None:
             raise RuntimeError("Session repository not configured")
         async with self.sessions.lock(session_id, principal):

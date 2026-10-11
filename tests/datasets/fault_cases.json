@@ -1,0 +1,272 @@
+[
+  {
+    "case_id": "fault_bgp_00",
+    "family": "bgp",
+    "variation": 0,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_01",
+    "family": "bgp",
+    "variation": 1,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_02",
+    "family": "bgp",
+    "variation": 2,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_03",
+    "family": "bgp",
+    "variation": 3,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_04",
+    "family": "bgp",
+    "variation": 4,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_05",
+    "family": "bgp",
+    "variation": 5,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_06",
+    "family": "bgp",
+    "variation": 6,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_07",
+    "family": "bgp",
+    "variation": 7,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_08",
+    "family": "bgp",
+    "variation": 8,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_bgp_09",
+    "family": "bgp",
+    "variation": 9,
+    "question": "分析 R2 昨天下午 BGP 断连与丢包 的可能原因",
+    "ground_truth_root_cause": "physical_link_instability",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_00",
+    "family": "ospf",
+    "variation": 0,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_01",
+    "family": "ospf",
+    "variation": 1,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_02",
+    "family": "ospf",
+    "variation": 2,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_03",
+    "family": "ospf",
+    "variation": 3,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_04",
+    "family": "ospf",
+    "variation": 4,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_05",
+    "family": "ospf",
+    "variation": 5,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_06",
+    "family": "ospf",
+    "variation": 6,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_07",
+    "family": "ospf",
+    "variation": 7,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_08",
+    "family": "ospf",
+    "variation": 8,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_ospf_09",
+    "family": "ospf",
+    "variation": 9,
+    "question": "分析 R3 昨天下午 OSPF 邻居未建立 的可能原因",
+    "ground_truth_root_cause": "ospf_parameter_mismatch",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_00",
+    "family": "traffic",
+    "variation": 0,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_01",
+    "family": "traffic",
+    "variation": 1,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_02",
+    "family": "traffic",
+    "variation": 2,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_03",
+    "family": "traffic",
+    "variation": 3,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_04",
+    "family": "traffic",
+    "variation": 4,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_05",
+    "family": "traffic",
+    "variation": 5,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_06",
+    "family": "traffic",
+    "variation": 6,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_07",
+    "family": "traffic",
+    "variation": 7,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_08",
+    "family": "traffic",
+    "variation": 8,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  },
+  {
+    "case_id": "fault_traffic_09",
+    "family": "traffic",
+    "variation": 9,
+    "question": "分析 R4 昨天下午 利用率与 RTT 升高 的可能原因",
+    "ground_truth_root_cause": "traffic_congestion",
+    "fixture_type": "synthetic_counterfactual",
+    "must_not_claim": "已确认唯一根因"
+  }
+]

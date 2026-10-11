@@ -1,15 +1,35 @@
 services:
+  migrate:
+    image: network-aiops:local
+    env_file: .env
+    environment:
+      DEPENDENCY_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python", "-m", "scripts.migrate"]
   api:
     build: .
+    image: network-aiops:local
+    env_file: .env
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8082:8080"
     environment:
-      LLM_MODE: mock
-      DATA_BACKEND: mock
-      EMBEDDING_MODE: mock
+      DEPENDENCY_HOST_OVERRIDE: host.docker.internal
+      DATA_BACKEND: ${DOCKER_DATA_BACKEND:-mock}
+      LLM_MODE: ${DOCKER_LLM_MODE:-mock}
+      PERSISTENCE_BACKEND: postgres
+      ENABLE_DEMO_API: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./data/uploads:/app/data/uploads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
       interval: 15s
       timeout: 6s
       retries: 3
-# Deliberately no PostgreSQL, checkpointer, session tables, or data volumes.
+# Uses the user's existing PostgreSQL service on the host. Never recreates or
+# removes that container. Default Docker demo has mock LLM/SQL but real checkpoints.
