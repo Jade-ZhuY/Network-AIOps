@@ -1,0 +1,7 @@
+{
+  "bgp.md": {"doc_id":"sop-bgp","title":"BGP 邻居故障排查 SOP（演示）","version":"1.0","updated_at":"2026-10-01T00:00:00Z","access_scope":["netops"]},
+  "ospf.md": {"doc_id":"sop-ospf","title":"OSPF 邻居建立排查 SOP（演示）","version":"1.0","updated_at":"2026-10-01T00:00:00Z","access_scope":["netops"]},
+  "traffic.md": {"doc_id":"sop-traffic","title":"链路利用率与 RTT 调查 SOP（演示）","version":"1.0","updated_at":"2026-10-01T00:00:00Z","access_scope":["netops"]},
+  "protocols.md": {"doc_id":"network-protocols","title":"OSPF / RIP 协议原理笔记（演示）","version":"1.0","updated_at":"2026-10-01T00:00:00Z","access_scope":["netops"]},
+  "restricted.md": {"doc_id":"restricted-sop","title":"其他业务范围资料","version":"1.0","updated_at":"2026-10-01T00:00:00Z","access_scope":["private-team"]}
+}

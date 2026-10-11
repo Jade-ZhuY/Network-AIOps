@@ -1,0 +1,5 @@
+[
+  {"incident_id":"INC-BGP-001","device":"R2","root_cause":"physical_link_instability","label_use":"evaluation_only"},
+  {"incident_id":"INC-OSPF-002","device":"R3","root_cause":"ospf_parameter_mismatch","label_use":"evaluation_only"},
+  {"incident_id":"INC-TRAFFIC-003","device":"R4","root_cause":"traffic_congestion","label_use":"evaluation_only"}
+]
