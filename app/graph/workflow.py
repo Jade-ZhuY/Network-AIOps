@@ -211,7 +211,7 @@ class WorkflowService:
             "status": state["final_report"]["status"],
             "report": state["final_report"],
             "evidence": {"rag": state.get("rag_result"), "sql": state.get("sql_result")},
-            "trace": trace.events,
+            "trace": trace.snapshot(),
             "report_calls": state["report_calls"],
             "persistence_enabled": False,
         }

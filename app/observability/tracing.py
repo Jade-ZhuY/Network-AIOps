@@ -12,6 +12,10 @@ class RequestTrace:
     events: list[dict] = field(default_factory=list)
     lock: Lock = field(default_factory=Lock)
 
+    def snapshot(self):
+        with self.lock:
+            return [event.copy() for event in self.events]
+
     @contextmanager
     def span(self, name: str):
         start = time.perf_counter()

@@ -1,5 +1,7 @@
 """Deliberately narrow SQL dialect, separate from database authorization."""
 
+import re
+
 import sqlglot
 from sqlglot import exp
 
@@ -27,6 +29,8 @@ ALLOWED_FUNCTIONS = (
 def validate_sql(sql: str, max_rows: int = 200) -> exp.Select:
     if len(sql) > 12000:
         raise SqlRejected("SQL exceeds size budget")
+    if re.search(r"/\*|--|#", sql):
+        raise SqlRejected("SQL comments and optimizer hints are outside the MVP dialect")
     try:
         statements = sqlglot.parse(sql, read="mysql")
     except sqlglot.errors.ParseError as exc:
