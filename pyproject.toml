@@ -1,0 +1,36 @@
+[project]
+name = "network-aiops"
+version = "0.1.0"
+description = "Four-agent network operations assistant, development steps 1–8"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "langchain>=1.0,<2",
+  "langgraph>=1.0,<2",
+  "langchain-openai>=1.0,<2",
+  "sqlalchemy>=2.0,<3",
+  "pymysql>=1.1,<2",
+  "sqlglot>=26,<31",
+  "rank-bm25>=0.2.2,<1",
+  "pypdf>=5,<7",
+  "tzdata>=2025.1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "httpx>=0.28,<1", "ruff>=0.11,<1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
