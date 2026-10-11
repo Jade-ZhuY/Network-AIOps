@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
-    environment: Literal["development", "test"] = "development"
+    environment: Literal["development", "test", "production"] = "development"
     llm_mode: Literal["mock", "openai"] = "mock"
     data_backend: Literal["mock", "mysql"] = "mock"
     embedding_mode: Literal["mock", "openai"] = "mock"
@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     embedding_model: str = ""
     embedding_api_key: SecretStr = SecretStr("EMPTY")
     knowledge_dir: Path = ROOT / "data" / "knowledge"
+    knowledge_upload_dir: Path = ROOT / "data" / "uploads"
+    persistence_backend: Literal["none", "memory", "postgres"] = "none"
+    checkpoint_postgres_uri: SecretStr = SecretStr("")
+    api_auth_token: SecretStr = SecretStr("")
+    api_admin_token: SecretStr = SecretStr("")
+    enable_demo_api: bool = True
+    retention_days: int = Field(default=30, ge=1, le=365)
+    request_timeout_seconds: float = Field(default=180, gt=0, le=600)
+    upload_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, le=20 * 1024 * 1024)
 
     @field_validator("default_timezone")
     @classmethod
@@ -55,4 +64,13 @@ class Settings(BaseSettings):
             raise ValueError("MYSQL_READONLY_URI is required for mysql mode")
         if self.embedding_mode == "openai" and not self.embedding_model:
             raise ValueError("EMBEDDING_MODEL is required for openai embeddings")
+        if (
+            self.persistence_backend == "postgres"
+            and not self.checkpoint_postgres_uri.get_secret_value()
+        ):
+            raise ValueError("CHECKPOINT_POSTGRES_URI is required for postgres persistence")
+        if self.environment == "production" and (
+            not self.api_auth_token.get_secret_value() or self.enable_demo_api
+        ):
+            raise ValueError("Production requires API_AUTH_TOKEN and ENABLE_DEMO_API=false")
         return self

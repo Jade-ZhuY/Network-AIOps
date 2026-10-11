@@ -83,7 +83,9 @@ async def test_previous_task_results_reset(service, scope):
         "trace": RequestTrace("1"),
         "messages": [{"role": "user", "content": QUESTIONS[2]}],
     }
-    first = await service.graph.ainvoke(initial)
+    from app.schemas.context import InvocationContext
+
+    first = await service.graph.ainvoke(initial, context=InvocationContext(scope, initial["trace"]))
     assert first["rag_result"] and first["sql_result"]
     previous = deepcopy({key: value for key, value in first.items() if key not in ("trace",)})
     second = await service.graph.ainvoke(
@@ -92,7 +94,8 @@ async def test_previous_task_results_reset(service, scope):
             "question": QUESTIONS[0],
             "trace": RequestTrace("2"),
             "messages": [{"role": "user", "content": QUESTIONS[0]}],
-        }
+        },
+        context=InvocationContext(scope, RequestTrace("2")),
     )
     assert second["sql_result"] is None
     assert second["report_calls"] == 1

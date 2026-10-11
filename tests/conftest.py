@@ -7,6 +7,9 @@ from app.schemas.models import Scope
 
 def pytest_addoption(parser):
     parser.addoption(
+        "--run-postgres", action="store_true", help="Durable PostgreSQL session/recovery tests"
+    )
+    parser.addoption(
         "--run-mysql", action="store_true", help="Read-only integration tests using local .env"
     )
 
@@ -15,7 +18,13 @@ def pytest_addoption(parser):
 def mysql_service(request):
     if not request.config.getoption("--run-mysql"):
         pytest.skip("Use --run-mysql to exercise the local business database")
-    live = Settings(data_backend="mysql", llm_mode="mock", embedding_mode="mock")
+    live = Settings(
+        data_backend="mysql",
+        llm_mode="mock",
+        embedding_mode="mock",
+        persistence_backend="none",
+        enable_demo_api=True,
+    )
     instance = WorkflowService(live)
     yield instance
     instance.close()

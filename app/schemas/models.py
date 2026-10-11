@@ -165,3 +165,28 @@ class AnalyzeRequest(BaseModel):
         except (KeyError, ValueError) as exc:
             raise ValueError("Unknown IANA timezone") from exc
         return value
+
+
+class ChatRequest(AnalyzeRequest):
+    session_id: str = Field(min_length=1, max_length=64)
+
+
+class SessionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(default="新调查", min_length=1, max_length=100)
+    timezone: str = "Asia/Shanghai"
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        return AnalyzeRequest.valid_timezone(value)
+
+
+class BusinessCompletion(BaseModel):
+    completed: bool
+
+
+class ReportDecision(BaseModel):
+    """LLM selects evidence-backed conclusions; it never writes raw numeric facts."""
+
+    hypothesis_order: list[int] = Field(default_factory=list, max_length=10)

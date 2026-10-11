@@ -88,10 +88,10 @@ class HybridRetriever:
         self.corpus_tokens = [tokens(chunk.text + " " + (chunk.section or "")) for chunk in chunks]
 
     def search(self, question: str, scope: Scope, top_k: int | None = None) -> RagResult:
+        groups = set(scope.knowledge_groups)
+        groups.update(f"tenant:{scope.tenant_id}:{group}" for group in scope.knowledge_groups)
         authorized = [
-            i
-            for i, chunk in enumerate(self.chunks)
-            if set(chunk.access_scope).intersection(scope.knowledge_groups)
+            i for i, chunk in enumerate(self.chunks) if set(chunk.access_scope).intersection(groups)
         ]
         query_tokens = tokens(question)
         if not authorized or not query_tokens:

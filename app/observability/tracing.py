@@ -1,7 +1,10 @@
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from threading import Lock
+
+active_trace: ContextVar = ContextVar("aiops_request_trace", default=None)
 
 
 @dataclass

@@ -44,7 +44,7 @@ class MockNetworkModel(BaseChatModel):
             if "get_schema" not in completed:
                 name, arguments = "get_schema", {}
             elif "query_network_metrics" not in completed:
-                name, arguments = "query_network_metrics", {"plan": payload["query_plan"]}
+                name, arguments = "query_network_metrics", {}
             else:
                 name, arguments = "SqlResult", completed["query_network_metrics"]
         elif self.role == "report":
