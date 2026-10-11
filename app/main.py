@@ -13,7 +13,13 @@ from app.rag.management import KnowledgeManager
 from app.schemas.models import AnalyzeRequest, ChatRequest, Scope, SessionCreate
 from app.security.auth import Principal, admin_principal, current_principal
 from app.storage.checkpoint import postgres_resources
-from app.storage.sessions import MemorySessions, PostgresSessions, RequestCapacity, SessionBusy, SessionMissing
+from app.storage.sessions import (
+    MemorySessions,
+    PostgresSessions,
+    RequestCapacity,
+    SessionBusy,
+    SessionMissing,
+)
 
 User = Annotated[Principal, Depends(current_principal)]
 Admin = Annotated[Principal, Depends(admin_principal)]
@@ -126,7 +132,11 @@ def create_app(settings: Settings | None = None):
 
     @api.exception_handler(RequestCapacity)
     async def capacity(request, exc):
-        return JSONResponse(status_code=429, content={"detail": "Investigation concurrency limit reached"}, headers={"Retry-After": "2"})
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Investigation concurrency limit reached"},
+            headers={"Retry-After": "2"},
+        )
 
     if settings.persistence_backend != "none":
 
@@ -183,7 +193,18 @@ def create_app(settings: Settings | None = None):
 
         @api.post("/api/v1/sessions/{session_id}/resume")
         async def resume(session_id: str, principal: User):
-            return await api.state.service.resume(principal, session_id)
+            try:
+                return await api.state.service.resume(principal, session_id)
+            except (SessionMissing, SessionBusy, RequestCapacity):
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "resume_or_storage_unavailable",
+                        "error_type": type(exc).__name__,
+                    },
+                ) from None
 
         @api.delete("/api/v1/sessions/{session_id}", status_code=204)
         async def delete_session(session_id: str, principal: User):

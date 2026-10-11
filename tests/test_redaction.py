@@ -13,6 +13,7 @@ from app.security.redaction import redact_sensitive_text
         "mysql+pymysql://user:very-private@localhost/db",
         "password=private-value",
         "API_KEY=private-value",
+        "密钥sk_tr_ABCDEFGHIJKLMN123456",
     ],
 )
 def test_credentials_redacted(text):

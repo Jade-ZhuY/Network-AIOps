@@ -1,42 +1,52 @@
-# 开发范围及验收记录
+# 开发状态与决策
 
-基线：根目录 PRD v1.0、开发手册 v1.0 的第 14 节任务表。
+基线：原始 PRD v1.0、开发手册 v1.0 的第 14 节。原始需求文件未改动。用户先要求第 1–8 步并在持久化前停止；后续提供实际模型、PostgreSQL 并要求继续剩余工作，最新排除应用 Docker 部署。
 
-| 步骤 | 本次范围 | 验收依据（完成后填写） |
+## 当前交付
+
+| 步骤 | 实现 | 验收 |
 |---|---|---|
-| 1 | FastAPI、Pydantic Settings、uv 锁文件、Docker mock 配置 | 已验证 uv frozen sync、HTTP health/OpenAPI、Compose 配置；Docker 镜像运行未验证 |
-| 2 | 六张 MySQL 主表、UTC 种子、三个故障场景 | 已创建 network_aiops_demo；实际只读查询返回 R2 告警 3、平均丢包 6.06%；离线内存结果一致 |
-| 3 | 指标目录、参数化查询、AST Guard、服务端授权、超时/行限制 | tests/test_sql.py；MySQL 实际账号拒绝主表读取/写入、跨租户过滤、OR 条件、行上限测试通过 |
-| 4 | Markdown/文本/PDF 解析、ACL、BM25 + 向量混合召回、引用 | tests/test_rag.py：实际文字 PDF 页码、ACL 前置过滤、引用 ID/片段一致、空检索、注入内容不执行 |
-| 5 | LangChain create_agent 的独立 SQL/RAG 工具循环 | tests/test_workflow.py：get_schema → query_network_metrics、search_network_knowledge 实际调用及结果适配 |
-| 6 | Supervisor、结构化 RoutePlan、实体/时间解析及澄清 | tests/test_planning.py：三路、中文/英文、UTC/Shanghai、下午/最近 24 小时、显式追问上下文、缺字段澄清 |
-| 7 | LangGraph 单路/双路 AND 屏障、结果刷新、报告一次 | 三路/慢分支/并发隔离/旧结果清除/单侧双侧失败测试；五个实际 MySQL HTTP 演示均报告一次 |
-| 8 | 结构化 NetworkReport、事实/推断/证据缺口、引用核对 | tests/test_report.py：伪造数值/引用/总结/确定根因/删除缺口均被拦截；三故事均有待验证假设 |
+| 1 | FastAPI / Pydantic / uv / 原有离线脚手架 | 本地 frozen sync、health、OpenAPI；应用 Docker 不在本轮范围 |
+| 2 | 六主表、三故障种子、六授权视图 | 实际 MySQL R2 告警 3、平均丢包 6.06% |
+| 3 | 九种指标、受限 SQL、AST、授权封装、只读账号 | 主表/写入/系统表/跨租户/链路对端/超时/限行回归 |
+| 4 | 文件/文字 PDF、页码/章节、ACL、BM25/RRF | 原文引用核对、权限与空检索；dense/rerank 显式 mock |
+| 5 | SQL/RAG create_agent 实际工具循环 | 实际 schema→query 和 search 工具，不返回伪造数据 |
+| 6 | 结构化受限规划 + 真实 Supervisor 决策 | 固定 60 问 mock 与真实组件均 60/60，明确混合规划边界 |
+| 7 | 三路、双路 AND、每轮刷新 | 单次报告、慢分支/失败/并发隔离 |
+| 8 | 保守证据报告 | 事实/假设/缺口分离，模型不能新增数字或确认根因 |
+| 9 | AsyncPostgresSaver、会话/请求注册表、归属和锁 | 重建连接池后追问、断点恢复、首次 checkpoint 前中断恢复 |
+| 10 | 授权 API、原生工作台、知识管理、Trace | 浏览器登录/调查/证据/历史/知识；上传 ACL 与索引管理 |
+| 11 | 固定 Evals、安全回归、本地运行与验收文档 | 150 项通过；真实端到端 5/5；性能/质量差距显式记录 |
 
-## 明确停止边界
+第 1–8 步的旧停止边界仅适用于 `milestone-step-8`，不描述当前分支。历史细节见 verification.md；当前结果见 verification-step11.md。
 
-- **第 9 步及以后不开发**：无 PostgreSQL Saver、无业务会话保存、无重启恢复。
-- LangGraph 编译不传 checkpointer；无 InMemorySaver（也不暗中保存会话）。
-- MySQL DDL/种子属于第 2 步业务建模，不代表开始第 9 步会话持久化。
-- 默认 SQL 数据、RAG 索引、执行轨迹均为本次进程内/请求内数据。
-- 仅提供开发验证入口，不建设第 10 步正式聊天/会话 API 和展示页。
-- mock 模型/embedding 不代表真实模型能力或 PRD 的全量质量指标已达标。
+## 持久化与身份决策
 
-## 初始环境
+- 业务 MySQL 与状态 PostgreSQL 分离。只在独立 `network_aiops_state` 创建应用状态表，不覆盖既有数据库。
+- State 仅业务 JSON/消息，Scope/Trace 走 InvocationContext，避免保存锁、连接、可变 Trace 对象。
+- 当前归属须同时匹配 owner、tenant、scope_hash。服务端生成 Thread ID，客户端不能指定授权范围。
+- 单会话跨进程 advisory lock；chat/resume 单进程并发预算。多轮解析取最近有效 RoutePlan，并清空前轮证据。
+- checkpoint 与请求展示记录分别提交。同步 durability 明确成功；中断请求可恢复，不把失败写入当成成功保存。
+- 删除/过期清理均调用官方 saver thread 删除。清理默认 dry-run，明确 apply 才删除。
+- 两个配置令牌是本地固定工程师/管理员身份；多人 IAM/SSO 不在 MVP 内。
 
-- 2026-10-11：目录初始仅含 PRD、开发手册；已新建 Git 仓库与开发分支。
-- uv 0.12.7 / Python 3.12.7；Docker CLI 存在，Docker Engine 未启动。
-- 缺失真实 LLM/MySQL/Embedding 配置时使用显式标注的 mock，不伪装真实数据。
+## 工具与模型取舍
 
-## MySQL 接入更新
+- 真实 OpenAI 兼容模型的 tool calling、结构化输出、usage 已实测。关键配置失败不静默退为 mock。
+- Supervisor 使用代码规范化实体/日期 + 模型路由校验，不声称任意自然语言问题已泛化。
+- SQL 通过服务端九种指标目录构造 SELECT，实际 MySQL 应用账号只 SELECT 六视图。链路返回必须两端均授权。
+- RAG 使用真实文件解析/稀疏检索；dense embedding 与词项 rerank 仍是可替换 mock，不误标为 BGE。
+- Report 事实与局限来自不可变工具证据，真实模型仅排序证据支持的候选假设。这减少捏造，也限制开放式诊断能力。
+- 根因标注仅供评估，业务种子不含已确认根因。30 个故障评估是三故事数值变体，真实网络质量另需验证。
 
-用户明确要求使用已启动 MySQL，提供本地管理员连接信息后创建新业务库 network_aiops_demo。应用使用随机密码的专用只读账号，仅 SELECT 四个视图；root 凭据未保存。`.env` 已被 Git 忽略。该业务数据导入属于第 2 步，**不包含任何会话/Checkpoint 表**。
+## 展示与本地运行取舍
 
-## 实现取舍
+- 选择原生 HTML/CSS/JS 替代 Streamlit，无 Node 构建依赖，与 FastAPI 同源运行。
+- 页面只使用 textContent 渲染外部内容，严格 CSP；应用令牌不含于静态资源，退出清空私有状态，异步请求防跨登录状态回填。
+- 文档源文件保存在 data/uploads、metadata 在 PostgreSQL；内存索引每次启动重建，无向量数据库部署。需联合备份文件与数据库。
+- 使用 scripts.serve 适配 Windows 的 Psycopg 异步事件循环。
+- 按最新用户要求排除应用 Docker 部署；既有 PostgreSQL 容器保留。新增应用演示容器已撤下，Compose/Dockerfile 回到第 8 步离线脚手架。
 
-- 四角色均经 LangChain create_agent + ToolStrategy；mock 模型会实际发起工具调用，不返回预制查询数据。
-- Supervisor 目前采用受限实体/时间规划器作为结构化约束，模型不能自行扩大范围；不是全自然语言泛化能力已验收。
-- Report 使用严格证据模板，原因阈值仅用于三个演示故事；模型不能新增未观测事实或把原因标记为已确认。
-- 稠密向量与词项 rerank 是确定性 mock，BM25/RRF 为实际算法；Qdrant 持久索引、真实 BGE/reranker 未接入。
-- 自测与只读开发验证 API 属于前八步交付验收，不扩展为第 10 步正式产品 UI/API。
-- 后续从第 9 步继续：先会话归属/序列化设计，再 PostgreSQL Saver/恢复测试；本次未创建相关代码。
+## 已知质量差距
+
+参见 verification-step11.md：真实 embedding 未配置；人工引用语义评审、真实事故泛化、全量真实多轮和 P95 负载测试未完成。普通 SQL 实测样例超过拟定 15 秒目标。这些是显式验收差距，不应从 mock 的 100% 分数推断已达标。

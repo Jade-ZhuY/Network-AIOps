@@ -25,7 +25,6 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("EMPTY")
     llm_timeout_seconds: float = Field(default=30, gt=0, le=120)
     llm_reasoning_effort: Literal["low", "high", "max"] | None = None
-    dependency_host_override: str = ""
     agent_timeout_seconds: float = Field(default=35, gt=0, le=180)
     agent_recursion_limit: int = Field(default=16, ge=4, le=32)
     mysql_readonly_uri: SecretStr = SecretStr("")
@@ -63,16 +62,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def required_live_configuration(self):
-        if self.dependency_host_override:
-            if self.dependency_host_override not in ("host.docker.internal", "localhost"):
-                raise ValueError("Unsupported dependency host override")
-            for field in ("checkpoint_postgres_uri", "mysql_readonly_uri"):
-                value = (
-                    getattr(self, field)
-                    .get_secret_value()
-                    .replace("@127.0.0.1:", f"@{self.dependency_host_override}:")
-                )
-                setattr(self, field, SecretStr(value))
         if self.llm_mode == "openai" and self.llm_model == "replace-with-served-model-id":
             raise ValueError("Set LLM_MODEL before enabling openai mode")
         if self.data_backend == "mysql" and not self.mysql_readonly_uri.get_secret_value():

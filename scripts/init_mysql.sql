@@ -77,6 +77,10 @@ CREATE TABLE network_metrics (
 
 CREATE INDEX idx_metric_device_time ON network_metrics (device_id, sample_time);
 
+CREATE SQL SECURITY DEFINER VIEW v_interface_status AS SELECT d.device_id,d.hostname,i.interface_id,i.interface_name,i.admin_status,i.oper_status,d.tenant_id FROM network_interfaces i JOIN network_devices d ON i.device_id=d.device_id;
+
+CREATE SQL SECURITY DEFINER VIEW v_link_status AS SELECT d.device_id,d.hostname,a.interface_name,e.device_id AS peer_device_id,e.hostname AS peer_hostname,b.interface_name AS peer_interface_name,l.link_id,l.link_status,d.tenant_id,e.tenant_id AS peer_tenant_id FROM network_links l JOIN network_interfaces a ON l.src_interface_id=a.interface_id JOIN network_interfaces b ON l.dst_interface_id=b.interface_id JOIN network_devices d ON a.device_id=d.device_id JOIN network_devices e ON b.device_id=e.device_id;
+
 CREATE SQL SECURITY DEFINER VIEW v_device_status AS SELECT device_id, hostname, region, status, tenant_id FROM network_devices;
 
 CREATE SQL SECURITY DEFINER VIEW v_alarm_events AS SELECT a.alarm_id, d.device_id, d.hostname, a.severity, a.alarm_type, a.description, a.occurred_at, d.tenant_id FROM network_alarms a JOIN network_devices d ON a.device_id=d.device_id;
@@ -85,6 +89,6 @@ CREATE SQL SECURITY DEFINER VIEW v_interface_metrics AS SELECT m.metric_id, d.de
 
 CREATE SQL SECURITY DEFINER VIEW v_incident_summaries AS SELECT n.incident_id, d.device_id, d.hostname, n.started_at, n.ended_at, n.symptom, d.tenant_id FROM network_incidents n JOIN network_devices d ON n.device_id=d.device_id;
 
--- Provision a netops_ro account separately with SELECT on these four views ONLY.
+-- Provision a netops_ro account separately with SELECT on these six views ONLY.
 -- No base-table privileges, no root_cause/resolution field in views.
 -- Credentials are not stored here.

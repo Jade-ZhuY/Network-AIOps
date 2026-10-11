@@ -8,6 +8,7 @@ import pytest
 from app.config import Settings
 from app.graph.workflow import WorkflowService
 from app.observability.tracing import RequestTrace
+from app.rag.management import KnowledgeManager
 from app.schemas.context import InvocationContext
 from app.schemas.models import Scope
 from app.security.auth import Principal
@@ -25,9 +26,13 @@ def run(coro):
 
 
 @asynccontextmanager
-async def service():
+async def service(**overrides):
     settings = Settings(
-        llm_mode="mock", data_backend="mysql", persistence_backend="postgres", embedding_mode="mock"
+        llm_mode="mock",
+        data_backend="mysql",
+        persistence_backend="postgres",
+        embedding_mode="mock",
+        **overrides,
     )
     async with postgres_resources(settings) as (pool, saver):
         instance = WorkflowService(settings, saver, PostgresSessions(pool))
@@ -132,3 +137,37 @@ def test_cross_process_session_lock(request):
                 await first.delete_session(actor, sid)
 
     run(check())
+
+
+def test_uploaded_knowledge_survives_new_process_resources(request, tmp_path):
+    enabled(request)
+    actor = Principal("test-" + uuid4().hex, "admin", Scope())
+    marker = "PERSISTED_KNOWLEDGE_" + uuid4().hex
+
+    async def upload():
+        async with service(knowledge_upload_dir=tmp_path) as app:
+            manager = KnowledgeManager(app, app.sessions, app.settings)
+            await manager.rebuild()
+            row = await manager.upload(
+                "sop.md", "重启知识验收", ("# BGP\n\nBGP 接口证据 " + marker).encode(), actor
+            )
+            assert row["status"] == "ready"
+            return row["doc_id"]
+
+    doc_id = run(upload())
+
+    async def restore():
+        async with service(knowledge_upload_dir=tmp_path) as app:
+            manager = KnowledgeManager(app, app.sessions, app.settings)
+            try:
+                await manager.rebuild()
+                assert (await manager.get(doc_id, actor))["status"] == "ready"
+                citations = app.retriever.search("BGP 接口证据 " + marker, actor.scope).citations
+                assert any(item.doc_id == doc_id and marker in item.text for item in citations)
+                other = app.retriever.search(marker, Scope(tenant_id="other-tenant")).citations
+                assert all(item.doc_id != doc_id for item in other)
+            finally:
+                await manager.remove(doc_id, actor)
+
+    run(restore())
+    assert not list(tmp_path.iterdir())

@@ -91,6 +91,24 @@ class Incident(Base):
 
 # tenant_id is reserved for backend enforcement, not advertised to the Agent.
 VIEW_COLUMNS = {
+    "v_interface_status": (
+        "device_id",
+        "hostname",
+        "interface_id",
+        "interface_name",
+        "admin_status",
+        "oper_status",
+    ),
+    "v_link_status": (
+        "device_id",
+        "hostname",
+        "interface_name",
+        "peer_device_id",
+        "peer_hostname",
+        "peer_interface_name",
+        "link_id",
+        "link_status",
+    ),
     "v_device_status": ("device_id", "hostname", "region", "status"),
     "v_alarm_events": (
         "alarm_id",
@@ -121,6 +139,8 @@ VIEW_COLUMNS = {
     ),
 }
 VIEW_SELECTS = {
+    "v_interface_status": "SELECT d.device_id,d.hostname,i.interface_id,i.interface_name,i.admin_status,i.oper_status,d.tenant_id FROM network_interfaces i JOIN network_devices d ON i.device_id=d.device_id",
+    "v_link_status": "SELECT d.device_id,d.hostname,a.interface_name,e.device_id AS peer_device_id,e.hostname AS peer_hostname,b.interface_name AS peer_interface_name,l.link_id,l.link_status,d.tenant_id,e.tenant_id AS peer_tenant_id FROM network_links l JOIN network_interfaces a ON l.src_interface_id=a.interface_id JOIN network_interfaces b ON l.dst_interface_id=b.interface_id JOIN network_devices d ON a.device_id=d.device_id JOIN network_devices e ON b.device_id=e.device_id",
     "v_device_status": "SELECT device_id, hostname, region, status, tenant_id FROM network_devices",
     "v_alarm_events": "SELECT a.alarm_id, d.device_id, d.hostname, a.severity, a.alarm_type, a.description, a.occurred_at, d.tenant_id FROM network_alarms a JOIN network_devices d ON a.device_id=d.device_id",
     "v_interface_metrics": "SELECT m.metric_id, d.device_id, d.hostname, i.interface_name, m.sample_time, m.latency_ms, m.packet_loss_pct, m.utilization_pct, d.tenant_id FROM network_metrics m JOIN network_devices d ON m.device_id=d.device_id LEFT JOIN network_interfaces i ON m.interface_id=i.interface_id",

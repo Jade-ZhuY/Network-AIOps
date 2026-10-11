@@ -51,13 +51,17 @@ def resolve_window(question: str, now: datetime, timezone: str):
 
 
 def build_route_plan(
-    question: str, now: datetime, timezone: str, history: list[str] | None = None
+    question: str,
+    now: datetime,
+    timezone: str,
+    history: list[str] | None = None,
+    context_plan: RoutePlan | None = None,
 ) -> RoutePlan:
     q = question.strip()
     lower = q.lower()
     history = (history or [])[-6:]
-    previous = None
-    for index, prior in enumerate(history):
+    previous = context_plan
+    for index, prior in enumerate(history if context_plan is None else []):
         candidate = build_route_plan(prior, now, timezone, history[:index])
         if candidate.query_plan and not candidate.needs_clarification:
             previous = candidate
@@ -169,6 +173,9 @@ def build_route_plan(
             else "alarm_events"
         )
     for terms, metric in (
+        (("接口状态", "interface status"), "interface_status"),
+        (("链路状态", "链路拓扑", "link status", "links"), "link_status"),
+        (("故障记录", "事件记录", "工单", "历史故障", "incidents"), "incident_summaries"),
         (("丢包", "loss"), "packet_loss_pct"),
         (("时延", "rtt", "latency"), "latency_ms"),
         (("利用率", "流量", "utilization", "traffic"), "utilization_pct"),
@@ -182,6 +189,8 @@ def build_route_plan(
                 metrics + ["alarm_events", "packet_loss_pct", "latency_ms", "utilization_pct"]
             )
         )
+    if not metrics and ("状态" in q or "status" in lower):
+        metrics.append("device_status")
     if not metrics:
         metrics = inherited.metrics if inherited else ["alarm_events"]
     all_devices = (
@@ -190,7 +199,9 @@ def build_route_plan(
     missing = []
     if not devices and not all_devices:
         missing.append("设备名称（例如 R2）")
-    if not start and any(metric != "device_status" for metric in metrics):
+    if not start and any(
+        metric not in ("device_status", "interface_status", "link_status") for metric in metrics
+    ):
         missing.append("查询时间范围及日期")
     if missing:
         return RoutePlan(

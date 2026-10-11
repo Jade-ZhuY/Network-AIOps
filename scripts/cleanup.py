@@ -56,7 +56,7 @@ async def cleanup(days, apply):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--days", type=int, default=30)
+    parser.add_argument("--days", type=int, default=Settings(llm_mode="mock").retention_days)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.days <= 365:

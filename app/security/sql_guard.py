@@ -118,8 +118,13 @@ def scoped_mysql_sql(ast: exp.Select, scope) -> tuple[str, dict]:
     secured = ast.copy()
     for table in list(secured.find_all(exp.Table)):
         columns = ", ".join(VIEW_COLUMNS[table.name])
+        view_predicate = predicate
+        if table.name == "v_link_status" and device_values:
+            view_predicate += (
+                f" AND peer_tenant_id=:acl_tenant AND peer_device_id IN ({device_values})"
+            )
         wrapped = sqlglot.parse_one(
-            f"SELECT {columns} FROM {table.name} WHERE {predicate}", read="mysql"
+            f"SELECT {columns} FROM {table.name} WHERE {view_predicate}", read="mysql"
         )
         table.replace(
             exp.Subquery(

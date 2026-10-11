@@ -1,11 +1,13 @@
 import asyncio
+import re
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 
-from app.agents.planning import build_route_plan
+from app.agents.planning import build_route_plan, resolve_window
 from app.agents.runtime import AgentRuntime
 from app.config import Settings
 from app.observability.tracing import RequestTrace, active_trace
@@ -27,7 +29,7 @@ def failure_report(state, status, message):
         summary=message,
         question=state.get("normalized_question", state["question"]),
         timezone=state["timezone"],
-        limitations=["当前未保存会话或 Checkpoint，后续请求需重新提交问题。"],
+        limitations=["本次未取得完整调查结论；保存状态以响应 checkpoint_saved 字段为准。"],
     )
 
 
@@ -40,9 +42,48 @@ def build_graph(agent_runtime: AgentRuntime, settings: Settings, checkpointer=No
                     for message in state.get("messages", [])[:-1]
                     if message.type == "human"
                 ]
-                baseline = build_route_plan(
-                    state["question"], settings.demo_now, state["timezone"], history
+                previous = (
+                    RoutePlan.model_validate(state["route_plan"])
+                    if state.get("route_plan")
+                    else None
                 )
+                baseline = build_route_plan(
+                    state["question"],
+                    settings.demo_now,
+                    state["timezone"],
+                    history,
+                    previous
+                    if previous and previous.query_plan and not previous.needs_clarification
+                    else None,
+                )
+                if (
+                    previous
+                    and previous.needs_clarification
+                    and baseline.needs_clarification
+                    and (state.get("final_report") or {}).get("status") == "needs_clarification"
+                ):
+                    old_question = previous.normalized_question
+                    try:
+                        new_window = resolve_window(
+                            state["question"], settings.demo_now, state["timezone"]
+                        )
+                        if new_window[0]:
+                            old_question = re.sub(
+                                r"\d{4}-\d{2}-\d{2}|(?:最近|过去|last|past)\s*\d+\s*(?:小时|hours?|h)|昨天|今天|yesterday|today",
+                                "",
+                                old_question,
+                                flags=re.I,
+                            )
+                    except ValueError:
+                        pass
+                    if re.search(r"R\d+", state["question"], re.I):
+                        old_question = re.sub(r"R\d+", "", old_question, flags=re.I)
+                    baseline = build_route_plan(
+                        old_question + "；补充：" + state["question"],
+                        settings.demo_now,
+                        state["timezone"],
+                        history,
+                    )
                 plan = await agent_runtime.supervisor(baseline)
                 return {
                     "route": plan.route,
@@ -248,7 +289,8 @@ class WorkflowService:
             }
         }
 
-    async def chat(self, principal, session_id, question, timezone):
+    @asynccontextmanager
+    async def request_slot(self):
         from app.storage.sessions import RequestCapacity
 
         try:
@@ -256,9 +298,13 @@ class WorkflowService:
         except TimeoutError:
             raise RequestCapacity from None
         try:
-            return await self._chat(principal, session_id, question, timezone)
+            yield
         finally:
             self.request_slots.release()
+
+    async def chat(self, principal, session_id, question, timezone):
+        async with self.request_slot():
+            return await self._chat(principal, session_id, question, timezone)
 
     async def _chat(self, principal, session_id, question, timezone):
         question = redact_sensitive_text(question)
@@ -267,7 +313,7 @@ class WorkflowService:
         async with self.sessions.lock(session_id, principal):
             request_id = f"req_{uuid4().hex}"
             trace = RequestTrace(f"trace_{uuid4().hex}")
-            await self.sessions.start_request(request_id, session_id, principal, question)
+            await self.sessions.start_request(request_id, session_id, principal, question, timezone)
             token = active_trace.set(trace)
             try:
                 state = await asyncio.wait_for(
@@ -317,12 +363,41 @@ class WorkflowService:
             return response
 
     async def resume(self, principal, session_id):
+        async with self.request_slot():
+            return await self._resume(principal, session_id)
+
+    async def _resume(self, principal, session_id):
         from app.storage.sessions import SessionMissing
 
         async with self.sessions.lock(session_id, principal):
             config = self.thread_config(principal, session_id)
             snapshot = await self.graph.aget_state(config)
-            if not snapshot.values:
+            history = await self.sessions.messages(session_id, principal, limit=1)
+            latest = history[-1] if history else None
+            rerun_input = None
+            if (
+                latest
+                and (
+                    not snapshot.values or snapshot.values.get("request_id") != latest["request_id"]
+                )
+                and (
+                    latest["status"] == "running"
+                    or (latest.get("response") or {}).get("interrupted")
+                )
+            ):
+                rerun_input = {
+                    "question": latest["message"],
+                    "timezone": latest["timezone"],
+                    "request_id": latest["request_id"],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": latest["message"],
+                            "id": f"question:{latest['request_id']}",
+                        }
+                    ],
+                }
+            if not snapshot.values and rerun_input is None:
                 raise SessionMissing
             trace = RequestTrace(f"trace_{uuid4().hex}")
             token = active_trace.set(trace)
@@ -330,14 +405,14 @@ class WorkflowService:
                 state = (
                     await asyncio.wait_for(
                         self.graph.ainvoke(
-                            None,
+                            rerun_input,
                             config=config,
                             context=InvocationContext(principal.scope, trace),
                             durability="sync",
                         ),
                         self.settings.request_timeout_seconds,
                     )
-                    if snapshot.next
+                    if snapshot.next or rerun_input is not None
                     else snapshot.values
                 )
                 response = self.response(state, trace, session_id)

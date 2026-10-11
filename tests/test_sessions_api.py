@@ -107,3 +107,63 @@ def test_storage_failure_not_pretend_saved(monkeypatch):
         assert result["status"] == "failed"
         assert result["checkpoint_saved"] is False
         assert "SECRET_DO_NOT_LOG" not in str(result)
+
+
+def test_clarification_reply_and_followup_restore_structured_context():
+    with TestClient(create_app(session_settings())) as client:
+        sid = client.post("/api/v1/sessions", json={}, headers=headers()).json()["session_id"]
+
+        def chat(message):
+            return client.post(
+                "/api/v1/chat", json={"session_id": sid, "message": message}, headers=headers()
+            ).json()
+
+        assert chat("查询 R2 的丢包率")["status"] == "needs_clarification"
+        clarified = chat("昨天")
+        assert clarified["status"] == "completed"
+        assert clarified["evidence"]["sql"]["queries"][0]["parameters"]["device_0"] == "R2"
+        followup = chat("那同一时间 R3 呢？")
+        assert followup["status"] == "completed"
+        assert followup["evidence"]["sql"]["queries"][0]["parameters"]["device_0"] == "R3"
+
+
+def test_request_before_initial_checkpoint_can_resume():
+    api = create_app(session_settings())
+    with TestClient(api) as client:
+        sid = client.post("/api/v1/sessions", json={}, headers=headers()).json()["session_id"]
+        repo = api.state.service.sessions
+        repo.requests["req_interrupted"] = dict(
+            request_id="req_interrupted",
+            session_id=sid,
+            owner_id="netops-engineer",
+            message="查询 R2 昨天告警",
+            timezone="UTC",
+            status="running",
+            response=None,
+            started_at="2026-10-11T00:00:00Z",
+            completed_at=None,
+        )
+        response = client.post(f"/api/v1/sessions/{sid}/resume", headers=headers())
+        assert response.status_code == 200
+        result = response.json()
+        assert result["request_id"] == "req_interrupted"
+        assert result["status"] == "completed" and result["restored"]
+        assert result["report"]["timezone"] == "UTC"
+
+
+@pytest.mark.parametrize("operation", ["chat", "resume"])
+async def test_global_request_capacity(service, operation):
+    from app.storage.sessions import RequestCapacity
+
+    for _ in range(service.settings.max_concurrent_requests):
+        await service.request_slots.acquire()
+    try:
+        with pytest.raises(RequestCapacity):
+            if operation == "chat":
+                await service.chat(None, "irrelevant", "BGP 是什么", "UTC")
+            else:
+                await service.resume(None, "irrelevant")
+    finally:
+        for _ in range(service.settings.max_concurrent_requests):
+            service.request_slots.release()
+    assert not service.request_slots.locked()

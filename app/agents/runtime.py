@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import tool
 
 from app.agents.mock_model import MockNetworkModel
+from app.agents.planning import MUTATION
 from app.agents.reporting import evidence_report, validate_report
 from app.observability.tracing import active_trace
 from app.schemas.models import (
@@ -151,6 +152,10 @@ class AgentRuntime:
         )
 
     async def sql(self, task, plan: QueryPlan, scope, timezone, trace):
+        if MUTATION.search(task):
+            with trace.span("security.request_guard") as span:
+                span["outcome"] = "forbidden"
+                return self.query_service.query(plan, scope, timezone, task)
         budget = ToolBudget()
 
         @tool

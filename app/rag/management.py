@@ -7,8 +7,8 @@ from fastapi import HTTPException
 
 from app.rag.hybrid_retrieval import HybridRetriever
 from app.rag.ingestion import load_documents, parse_document
-from app.storage.documents import DocumentStore
 from app.security.redaction import redact_sensitive_text
+from app.storage.documents import DocumentStore
 
 
 class KnowledgeManager:

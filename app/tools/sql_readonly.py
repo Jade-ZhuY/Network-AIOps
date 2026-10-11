@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy.exc import DBAPIError
 
 from app.schemas.models import QueryEvidence, QueryPlan, Scope, SqlResult
+from app.security.redaction import redact_sensitive_text
 from app.security.sql_guard import SqlRejected, validate_sql
 from app.storage.models import VIEW_COLUMNS
 from app.tools.metric_catalog import CATALOG
@@ -18,6 +19,8 @@ def utc_sql(value: datetime) -> str:
 def json_value(value):
     if isinstance(value, datetime):
         return value.replace(tzinfo=UTC).isoformat()
+    if isinstance(value, str):
+        return redact_sensitive_text(value)
     return value
 
 
@@ -52,7 +55,8 @@ class QueryService:
                 timezone=timezone,
                 warnings=["请求超出只读网络指标查询范围"],
             )
-        if any(metric != "device_status" for metric in plan.metrics) and not plan.start_utc:
+        snapshots = ("device_status", "interface_status", "link_status")
+        if any(metric not in snapshots for metric in plan.metrics) and not plan.start_utc:
             return SqlResult(
                 status="error", timezone=timezone, missing_evidence=["查询缺少时间范围"]
             )
@@ -89,7 +93,12 @@ class QueryService:
                         data_source=self.backend.source,
                         data_freshness_utc=max(
                             (
-                                str(row.get("latest_sample") or row.get("occurred_at") or "")
+                                str(
+                                    row.get("latest_sample")
+                                    or row.get("occurred_at")
+                                    or row.get("started_at")
+                                    or ""
+                                )
                                 for row in meaningful
                             ),
                             default="",
@@ -126,6 +135,8 @@ class QueryService:
         )
         if any(item.truncated for item in evidence):
             warnings.append("结果达到行数上限，表格仅包含部分记录")
+        if any(metric in snapshots for metric in plan.metrics):
+            warnings.append("状态快照未提供采集时间，不等同于实时或查询窗口内的历史观测。")
         return SqlResult(
             status=status,
             queries=evidence,
@@ -149,6 +160,32 @@ class QueryService:
             )
         if metric == "device_status":
             sql = "SELECT device_id, hostname, region, status FROM v_device_status"
+        elif metric == "interface_status":
+            sql = (
+                "SELECT hostname, interface_name, admin_status, oper_status FROM v_interface_status"
+            )
+            if plan.interface:
+                parameters["interface"] = plan.interface
+                where.append("interface_name=:interface")
+        elif metric == "link_status":
+            sql = "SELECT link_id, hostname, interface_name, peer_hostname, peer_interface_name, link_status FROM v_link_status"
+            if where:
+                device_predicate = where.pop()
+                peer_predicate = device_predicate.replace("hostname", "peer_hostname")
+                if plan.interface:
+                    parameters["interface"] = plan.interface
+                    where.append(
+                        f"(({device_predicate} AND interface_name=:interface) OR ({peer_predicate} AND peer_interface_name=:interface))"
+                    )
+                else:
+                    where.append(f"({device_predicate} OR {peer_predicate})")
+            elif plan.interface:
+                parameters["interface"] = plan.interface
+                where.append("(interface_name=:interface OR peer_interface_name=:interface)")
+        elif metric == "incident_summaries":
+            sql = "SELECT incident_id, hostname, started_at, ended_at, symptom FROM v_incident_summaries"
+            parameters.update(start=utc_sql(plan.start_utc), end=utc_sql(plan.end_utc))
+            where.extend(["started_at>=:start", "started_at<:end"])
         else:
             time_column = "occurred_at" if metric.startswith("alarm") else "sample_time"
             parameters.update(start=utc_sql(plan.start_utc), end=utc_sql(plan.end_utc))
@@ -179,8 +216,17 @@ class QueryService:
             sql += " GROUP BY hostname ORDER BY hostname"
         elif metric == "alarm_events":
             sql += " ORDER BY occurred_at, alarm_id"
-        elif metric != "device_status":
+        elif metric not in (
+            "device_status",
+            "interface_status",
+            "link_status",
+            "incident_summaries",
+        ):
             sql += " GROUP BY hostname, interface_name ORDER BY hostname, interface_name"
+        elif metric == "incident_summaries":
+            sql += " ORDER BY started_at, incident_id"
+        elif metric == "link_status":
+            sql += " ORDER BY link_id"
         else:
             sql += " ORDER BY hostname"
         return sql, parameters

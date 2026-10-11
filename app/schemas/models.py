@@ -3,6 +3,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
 from app.security.redaction import redact_sensitive_text
 
 Route = Literal["rag", "sql", "both"]
@@ -13,6 +14,9 @@ Metric = Literal[
     "latency_ms",
     "utilization_pct",
     "device_status",
+    "interface_status",
+    "link_status",
+    "incident_summaries",
 ]
 ToolStatus = Literal["ok", "no_data", "no_evidence", "forbidden", "timeout", "error"]
 

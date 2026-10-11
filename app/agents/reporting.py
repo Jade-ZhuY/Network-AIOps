@@ -27,6 +27,12 @@ def evidence_report(payload: dict) -> NetworkReport:
                     text = f"{row['hostname']} 在查询时间窗内有 {row['alarm_count']} 条匹配告警。"
                 elif query.metric == "device_status":
                     text = f"{row['hostname']} 最后已知状态为 {row['status']}，区域 {row['region']}；不代表实时探测。"
+                elif query.metric == "interface_status":
+                    text = f"{row['hostname']} / {row['interface_name']} 最后已知管理状态 {row['admin_status']}、运行状态 {row['oper_status']}；不代表实时或历史观测。"
+                elif query.metric == "link_status":
+                    text = f"链路 {row['link_id']}：{row['hostname']} / {row['interface_name']} ↔ {row['peer_hostname']} / {row['peer_interface_name']}，最后已知状态 {row['link_status']}。"
+                elif query.metric == "incident_summaries":
+                    text = f"事件 {row['incident_id']}：{row['hostname']}，开始于 {row['started_at']} UTC，现象：{row['symptom']}。"
                 else:
                     text = f"{row['hostname']} / {row['interface_name']} 的 {query.metric} 等权采样均值为 {row['average_value']:.3f} {query.unit}，范围 {row['min_value']:.3f}–{row['max_value']:.3f} {query.unit}，采样数 {row['sample_count']}。"
                     metric_rows.setdefault(row["hostname"], {})[query.metric] = (

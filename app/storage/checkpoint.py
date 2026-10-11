@@ -26,6 +26,7 @@ async def postgres_resources(settings):
         # Migrations are explicit (scripts.migrate), not hidden startup writes.
         async with pool.connection() as connection:
             await connection.execute("SELECT 1 FROM aiops_sessions LIMIT 1")
+            await connection.execute("SELECT timezone FROM aiops_requests LIMIT 1")
             await connection.execute("SELECT 1 FROM checkpoints LIMIT 1")
         yield pool, saver
     finally:

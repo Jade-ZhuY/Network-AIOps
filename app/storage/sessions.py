@@ -79,11 +79,13 @@ class PostgresSessions:
                     "SELECT pg_advisory_unlock(hashtextextended(%s,0))", (session_id,)
                 )
 
-    async def start_request(self, request_id, session_id, principal, message):
+    async def start_request(
+        self, request_id, session_id, principal, message, timezone="Asia/Shanghai"
+    ):
         async with self.pool.connection() as connection:
             await connection.execute(
-                "INSERT INTO aiops_requests(request_id,session_id,owner_id,message) VALUES (%s,%s,%s,%s)",
-                (request_id, session_id, principal.user_id, message),
+                "INSERT INTO aiops_requests(request_id,session_id,owner_id,message,timezone) VALUES (%s,%s,%s,%s,%s)",
+                (request_id, session_id, principal.user_id, message, timezone),
             )
 
     async def finish_request(self, request_id, response):
@@ -104,7 +106,7 @@ class PostgresSessions:
         await self.get(session_id, principal)
         async with self.pool.connection() as connection:
             cursor = await connection.execute(
-                "SELECT request_id,message,status,response,started_at,completed_at FROM aiops_requests WHERE session_id=%s ORDER BY started_at DESC LIMIT %s",
+                "SELECT request_id,message,timezone,status,response,started_at,completed_at FROM aiops_requests WHERE session_id=%s ORDER BY started_at DESC LIMIT %s",
                 (session_id, limit),
             )
             return [serialize(row) for row in reversed(await cursor.fetchall())]
@@ -186,12 +188,15 @@ class MemorySessions:
         finally:
             self.busy.remove(session_id)
 
-    async def start_request(self, request_id, session_id, principal, message):
+    async def start_request(
+        self, request_id, session_id, principal, message, timezone="Asia/Shanghai"
+    ):
         self.requests[request_id] = dict(
             request_id=request_id,
             session_id=session_id,
             owner_id=principal.user_id,
             message=message,
+            timezone=timezone,
             status="running",
             response=None,
             started_at=datetime.now(UTC).isoformat(),

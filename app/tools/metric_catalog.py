@@ -1,4 +1,19 @@
 CATALOG = {
+    "interface_status": {
+        "view": "v_interface_status",
+        "unit": None,
+        "description": "接口最后已知管理/运行状态（快照，非实时或历史观测）",
+    },
+    "link_status": {
+        "view": "v_link_status",
+        "unit": None,
+        "description": "两端都在授权范围内的链路最后已知状态（快照）",
+    },
+    "incident_summaries": {
+        "view": "v_incident_summaries",
+        "unit": "incidents",
+        "description": "查询窗口内开始的事件摘要，不含评估根因标签和修复答案",
+    },
     "alarm_count": {
         "view": "v_alarm_events",
         "unit": "count",

@@ -16,7 +16,7 @@ def schema_sql():
     for name, select in VIEW_SELECTS.items():
         statements.append(f"CREATE SQL SECURITY DEFINER VIEW {name} AS {select};")
     statements.append(
-        "-- Provision a netops_ro account separately with SELECT on these four views ONLY.\n-- No base-table privileges, no root_cause/resolution field in views.\n-- Credentials are not stored here."
+        "-- Provision a netops_ro account separately with SELECT on these six views ONLY.\n-- No base-table privileges, no root_cause/resolution field in views.\n-- Credentials are not stored here."
     )
     return "\n\n".join(statements) + "\n"
 
