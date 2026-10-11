@@ -1,0 +1,15 @@
+services:
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      LLM_MODE: mock
+      DATA_BACKEND: mock
+      EMBEDDING_MODE: mock
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 3
+# Deliberately no PostgreSQL, checkpointer, session tables, or data volumes.
