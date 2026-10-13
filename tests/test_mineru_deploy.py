@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pypdf import PdfReader
 
@@ -85,3 +87,12 @@ def test_webui_invalid_key_errors_do_not_echo_contents(tmp_path, key):
     with pytest.raises(ValueError, match="Invalid MinerU API key file") as error:
         launch_configuration({"MINERU_API_KEY_FILE": str(path)})
     assert "PRIVATE_VALUE_DO_NOT_ECHO" not in str(error.value)
+
+
+def test_requested_public_webui_mapping_does_not_publish_the_backend_api():
+    compose = (Path(__file__).resolve().parents[1] / "deploy/mineru/compose.yaml").read_text()
+    api, webui = compose.split("  webui:\n", 1)
+    assert '"127.0.0.1:18000:8000"' in api
+    assert '"0.0.0.0:18000:8000"' not in api
+    assert '"0.0.0.0:7860:7860"' in webui
+    assert "read_only: true" in webui

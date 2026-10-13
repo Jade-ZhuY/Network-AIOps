@@ -7,7 +7,8 @@
 - 显式要求 Vulkan，GPU 未就绪时失败，不静默改成 CPU 推理。
 - Python 基础镜像固定 digest；使用 Debian 收录的 USTC HTTPS 镜像源，保留发行版签名校验。依赖解析结果在部署验收时记录。
 - 该组合避免升级云端 CUDA 12.8 / NVIDIA 570 驱动；不同于官方 CUDA 13 + vLLM 镜像。
-- 只发布服务器回环端口 18000，API bearer key 保存在服务器 secrets 目录。
+- API 只发布服务器回环端口 18000，API bearer key 保存在服务器 secrets 目录。
+- WebUI 按用户要求发布到 IPv4 所有接口的 7860 端口；页面当前没有登录认证。
 - 模型、配置、上传源文件及产物挂载到独立 data 目录；API job/file 索引仍是进程内状态，不保证服务重启后恢复任务 ID。
 
 ## 目录
@@ -73,16 +74,21 @@ sudo docker compose logs --tail=100 webui
 
 WebUI 的 `/data` 对应宿主机 `data/webui`，与 API 的 `/data` 挂载不同。
 输出明确写入 `/data/output`，Gradio 临时文件写入 `/data/tmp`，避免默认
-`/service/output` 的只读文件系统错误。服务仅发布服务器回环端口 7860。
+`/service/output` 的只读文件系统错误。WebUI 按用户要求使用
+`0.0.0.0:7860:7860`，可在网络规则允许时通过 `http://HOST:7860/` 访问。
 
-本机另开 PowerShell 建立隧道，并保持窗口打开：
+公网访问不再需要 SSH 隧道；云平台安全组和服务器防火墙仍需允许对应访问。
+目前 WebUI 没有网页登录认证，GPU API 的 bearer key 不会保护网页入口。
+开放给公网后他人可能使用网页调用 GPU、访问网页可下载的产物；建议限制来源 IP，
+并为长期访问增加 HTTPS 和登录认证。API 的 18000 仍保留回环绑定和密钥校验。
+
+如需继续使用原有 SSH 访问方式，仍可在本机建立隧道：
 
 ```powershell
 ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:7860:127.0.0.1:7860 ubuntu@HOST
 ```
 
-随后打开 `http://127.0.0.1:7860/`，上传 PDF 使用网页解析。不要使用
-Gradio 公网 share 链接或直接公开 7860；此部署依赖 SSH 来保护网页入口。
+随后打开 `http://127.0.0.1:7860/`，上传 PDF 使用网页解析。
 关闭隧道仅切断电脑的访问，云端 WebUI 仍在后台运行。
 
 仅停止或重新启动网页，不影响 GPU API：
