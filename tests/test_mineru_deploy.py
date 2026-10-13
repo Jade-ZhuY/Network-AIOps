@@ -5,7 +5,7 @@ from pypdf import PdfReader
 
 from deploy.mineru.make_fixture import create
 from deploy.mineru.probe import read_key, same_origin_url
-from deploy.mineru.webui_start import launch_configuration
+from deploy.mineru.webui_start import launch_configuration, patch_download_script
 
 
 @pytest.mark.parametrize(
@@ -96,3 +96,30 @@ def test_requested_public_webui_mapping_does_not_publish_the_backend_api():
     assert '"0.0.0.0:18000:8000"' not in api
     assert '"0.0.0.0:7860:7860"' in webui
     assert "read_only: true" in webui
+
+
+def test_download_patch_is_narrow_and_shows_a_same_origin_save_link():
+    script = "\n".join(
+        [
+            "if (!runId || state.runId !== runId || state.pending.has(format)) return [skip(), skip(), skip()];",
+            'const anchor = document.createElement("a");',
+            "anchor.href = file.url;",
+            'return [button(label, true), ""];',
+        ]
+    )
+    patched = patch_download_script(script)
+    assert "state.runId = runId" in patched
+    assert "downloadUrl.origin !== window.location.origin" in patched
+    assert 'downloadUrl.pathname.startsWith("/gradio_api/file=")' in patched
+    assert "anchor.href = downloadUrl.href" in patched
+    assert 'data-mineru-download-ready="true"' in patched
+    assert "escapeHtml(downloadUrl.href)" in patched
+    assert "escapeHtml(file.orig_name" in patched
+    assert "点击保存到电脑" in patched
+    with pytest.raises(RuntimeError, match="verified 4.0.12"):
+        patch_download_script(patched)
+
+
+def test_download_patch_rejects_unknown_upstream_versions():
+    with pytest.raises(RuntimeError, match="verified 4.0.12"):
+        patch_download_script("unknown upstream script")
