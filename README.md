@@ -1,22 +1,42 @@
 # Network AIOps
 
-通信网络知识问答、只读运维数据查询与故障辅助诊断。按 PRD/开发手册完成 **第 1–11 步 MVP 功能实现**；第 8 步保留历史里程碑。本轮继续接入真实模型、PostgreSQL 会话及本地工作台，**不做应用 Docker 部署**。
+通信网络知识问答、只读运维数据查询与故障辅助诊断。基于 FastAPI、LangChain 和 LangGraph，按 PRD/开发手册完成 **第 1–11 步 MVP 功能实现**，支持离线 mock 演示、OpenAI 兼容模型、只读 MySQL 查询及 PostgreSQL 持久会话。
 
-## 本机运行（PowerShell）
+## 快速开始（离线演示）
+
+需要 Git、Python 3.12 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)。以下为 PowerShell 命令：
 
 ```powershell
-Set-Location 'D:\Network AIOps'
+git clone https://github.com/Jade259/Network-AIOps.git
+Set-Location Network-AIOps
 uv sync --frozen
-# 显式迁移；已执行，可重复运行。应用启动不会自动建表。
+# 仅在没有配置文件时复制，避免覆盖已有凭据。
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+uv run python -m scripts.demo --all
+uv run python -m scripts.serve --port 8080
+```
+
+默认配置使用 mock 模型、模拟运维数据和 mock 向量，无需模型 API key 或外部数据库，不产生模型 API 用量。服务启动后可访问 [健康检查](http://127.0.0.1:8080/health) 和 [API 文档](http://127.0.0.1:8080/docs)，通过 `/api/v1/demo/analyze` 体验单次分析。
+
+默认 `PERSISTENCE_BACKEND=none` 不启用工作台的会话及知识管理接口。如需无外部数据库的工作台演示，在 `.env` 中设置 `PERSISTENCE_BACKEND=memory`、`ENABLE_DEMO_API=false`，并分别设置自行生成的 `API_AUTH_TOKEN` 和 `API_ADMIN_TOKEN` 后重启服务。可用 `uv run python -c "import secrets; print(secrets.token_urlsafe(32))"` 生成每个令牌，随后打开 [工作台](http://127.0.0.1:8080/) 登录。memory 模式的会话和文档 metadata 在重启后丢失；跨进程持久化请配置 PostgreSQL 并显式运行迁移。
+
+`.env`、运行输出、数据库文件和上传文档均不提交到 Git。请勿公开真实 API key、数据库密码、应用令牌或实际运维数据；默认服务只绑定 `127.0.0.1`。Dockerfile/Compose 保留为第 8 步离线脚手架，当前推荐使用上述本地运行入口。
+
+## 持久会话运行（PowerShell）
+
+```powershell
+# 在克隆后的项目根目录执行。
+uv sync --frozen
+# 先配置 PostgreSQL 与应用令牌，再显式迁移。应用启动不会自动建表。
 uv run python -m scripts.migrate
 uv run python -m scripts.serve --port 8080
 ```
 
 打开 [工作台](http://127.0.0.1:8080/)、[API 文档](http://127.0.0.1:8080/docs) 或 [健康检查](http://127.0.0.1:8080/health)。Windows PostgreSQL 异步连接需要 SelectorEventLoop，请使用上述 `scripts.serve` 入口。
 
-登录令牌在本机 **`D:\Network AIOps\.env`**：工程师使用 `API_AUTH_TOKEN`；管理员使用 `API_ADMIN_TOKEN`。二者是应用凭据，**不是模型 API key**。令牌只保存在当前浏览器页会话 sessionStorage，退出会清空页面中的会话、证据与令牌。保持仅绑定回环地址。
+登录令牌在项目根目录的 **`.env`**：工程师使用 `API_AUTH_TOKEN`；管理员使用 `API_ADMIN_TOKEN`。二者是应用凭据，**不是模型 API key**。令牌只保存在当前浏览器页会话 sessionStorage，退出会清空页面中的会话、证据与令牌。保持仅绑定回环地址。
 
-当前本机配置：
+以下为本地验收使用的配置，非克隆项目后的默认设置：
 
 | 依赖 | 状态 |
 |---|---|
@@ -107,6 +127,10 @@ uv run python -m scripts.live_smoke --cleanup
 uv run python -m scripts.live_routes
 ```
 
-最新 **150 项测试通过**；真实 Supervisor 60/60，真实端到端冒烟 5/5。完整记录见 [第 9–11 步验收](docs/verification-step11.md)。mock 分数不等于真实质量：真实 embedding 未配置、引用语义人工评审未全量执行、真实事故泛化和 P95 负载指标未验收。普通 SQL 样例 19.642 秒高于 PRD 拟定 15 秒目标。
+公开发布前离线回归：**143 项通过、15 项外部数据库测试跳过**。第 9–11 步原始本地验收记录为 150 项测试通过、真实 Supervisor 60/60、真实端到端冒烟 5/5，见 [第 9–11 步验收](docs/verification-step11.md)。mock 分数不等于真实质量：真实 embedding 未配置、引用语义人工评审未全量执行、真实事故泛化和 P95 负载指标未验收。普通 SQL 样例 19.642 秒高于 PRD 拟定 15 秒目标。
 
 [API 文档](docs/api.md) · [开发状态与取舍](docs/development-status.md) · [第 1–8 步历史验收](docs/verification.md)
+
+## 许可证
+
+本项目采用 [Apache License 2.0](LICENSE)，Copyright 2026 Network AIOps contributors。

@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     max_concurrent_requests: int = Field(default=4, ge=1, le=32)
     upload_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, le=20 * 1024 * 1024)
 
+    @field_validator("llm_reasoning_effort", mode="before")
+    @classmethod
+    def empty_reasoning_effort(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @field_validator("default_timezone")
     @classmethod
     def timezone_exists(cls, value: str) -> str:
