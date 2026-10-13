@@ -1,0 +1,59 @@
+name: network-aiops-mineru
+services:
+  api:
+    build:
+      context: .
+      args:
+        DEBIAN_MIRROR: mirrors.ustc.edu.cn
+    image: network-aiops-mineru:4.0.12-vulkan
+    container_name: network-aiops-mineru
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18000:8000"
+    environment:
+      HOME: /data/home
+      MINERU_HOME: /data/home
+      XDG_CACHE_HOME: /data/home/cache
+      HF_HOME: /data/home/provider-cache/huggingface
+      MODELSCOPE_CACHE: /data/home/provider-cache/modelscope
+      MINERU_MODEL_SMALL_BACKEND: onnx
+      MINERU_MODEL_VLM_ENGINE: llama-cpp
+      MINERU_LLAMA_CPP_BACKEND: vulkan
+      MINERU_MODEL_SOURCE: local
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics
+      HF_HUB_DISABLE_XET: "1"
+      OMP_NUM_THREADS: "8"
+      OPENBLAS_NUM_THREADS: "8"
+      MINERU_API_KEY_FILE: /run/secrets/mineru_api_key
+    volumes:
+      - ../data:/data
+    secrets:
+      - mineru_api_key
+    gpus: all
+    cpus: 8
+    mem_limit: 24g
+    pids_limit: 512
+    shm_size: 2g
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "/service/healthcheck.py"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 180s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+secrets:
+  mineru_api_key:
+    file: ../secrets/mineru_api_key
