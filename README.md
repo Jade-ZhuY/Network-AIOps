@@ -7,7 +7,7 @@
 需要 Git、Python 3.12 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)。以下为 PowerShell 命令：
 
 ```powershell
-git clone https://github.com/Jade259/Network-AIOps.git
+git clone https://github.com/Jade-ZhuY/Network-AIOps.git
 Set-Location Network-AIOps
 uv sync --frozen
 # 仅在没有配置文件时复制，避免覆盖已有凭据。
