@@ -43,3 +43,24 @@
 - 本机原有 Milvus、MinIO、etcd 容器保持运行。没有在本机启动 MinerU 模型服务，没有改变应用、业务数据库或原有 RAG 解析器。
 - 此任务只部署独立解析服务；将其接入 Network AIOps 上传/索引流程属于下一步。现有 RAG 尚未自动切换到 MinerU。
 - MinerU V1 上传/任务/文件索引属于进程内状态，重启不保证旧 task/file ID 可继续使用；调用方需保存下载产物并重新提交中断任务。
+
+## WebUI 补充验收
+
+- 独立可选服务 `webui` / 容器 `network-aiops-mineru-webui` 已启动并 healthy，
+  复用现有镜像，不重建、不重新下载模型。没有给 WebUI 分配 GPU；Standard
+  解析连接已有 `http://api:8000`。原 API 容器 ID 保持不变且仍为 healthy。
+- 网页只发布 `127.0.0.1:7860`，本机另建 SSH 隧道访问，不开放云端公网端口。
+  两个容器均保持非 root 与只读根文件系统，WebUI 密钥从 secret 读取到进程环境，
+  不写入命令参数或浏览器配置。检查 `/config` 未包含实际 bearer key。
+- `webui_start.py` 使用只读绑定挂载，因此只补充配置即可使用已有镜像。
+  WebUI 输出与 Gradio 临时文件写入其 `/data/output`、`/data/tmp`；该容器的
+  `/data` 对应宿主机 `/home/ubuntu/network-aiops-mineru/data/webui`。
+- 实际网页 `/`、`/config` 均返回 200。通过浏览器上传自生成的两页扫描 PDF，
+  Standard + 强制 OCR，网页显示“已完成（3.38 秒）”，两页 PDF 预览与 Markdown
+  内容正常，保留 BGP、R3、6.06。服务已预热，该值不代表冷启动或吞吐量。
+- 非敏感截图保存在本机 `outputs/mineru-webui.png` 与
+  `outputs/mineru-webui-completed.png`，不提交 Git。
+- 部署工具测试 10 passed，包含新增 WebUI 密钥不进入参数、固定已有 API、
+  可写输出目录和无凭据回显的校验。默认全套测试 153 passed / 15 skipped；
+  Ruff 检查、格式检查与两端 Compose 配置校验通过。
+- 本次仅补充 MinerU WebUI，仍未切换 Network AIOps 的 RAG 解析器。

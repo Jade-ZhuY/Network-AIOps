@@ -54,6 +54,53 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+  webui:
+    profiles: [webui]
+    image: network-aiops-mineru:4.0.12-vulkan
+    container_name: network-aiops-mineru-webui
+    entrypoint: [python, /webui_start.py]
+    working_dir: /data
+    init: true
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:7860:7860"
+    environment:
+      HOME: /data/home
+      MINERU_HOME: /data/home
+      XDG_CACHE_HOME: /data/home/cache
+      GRADIO_TEMP_DIR: /data/tmp
+      GRADIO_ANALYTICS_ENABLED: "False"
+      MINERU_API_URL: http://api:8000
+      MINERU_API_KEY_FILE: /run/secrets/mineru_api_key
+    volumes:
+      - ../data/webui:/data
+      - ./webui_start.py:/webui_start.py:ro
+    secrets:
+      - mineru_api_key
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 256
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 secrets:
   mineru_api_key:
     file: ../secrets/mineru_api_key
