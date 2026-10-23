@@ -1,0 +1,47 @@
+server:
+  address: 127.0.0.1
+  port: ${AIOPS_JAVA_PORT:18081}
+  error:
+    include-message: never
+    include-stacktrace: never
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+spring:
+  application:
+    name: network-aiops-business
+  datasource:
+    url: ${AIOPS_JAVA_DATABASE_URL:jdbc:h2:file:./data/aiops-business;DB_CLOSE_ON_EXIT=FALSE}
+    username: sa
+    password: ${AIOPS_JAVA_DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 6
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: true
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+workspace:
+  auth:
+    engineer-token: ${AIOPS_JAVA_AUTH_ENGINEER_TOKEN:}
+    admin-token: ${AIOPS_JAVA_AUTH_ADMIN_TOKEN:}
+  agent:
+    enabled: ${AIOPS_AGENT_ENABLED:false}
+    base-url: ${AIOPS_AGENT_BASE_URL:http://127.0.0.1:8080}
+    connect-timeout: 3s
+    read-timeout: 185s
+    max-response-bytes: 8388608
+  frontend-path: ${AIOPS_FRONTEND_PATH:../app/web/dist}
+logging:
+  level:
+    root: INFO
+    org.springframework.security: WARN

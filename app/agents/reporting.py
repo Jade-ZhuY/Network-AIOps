@@ -1,10 +1,12 @@
-"""Evidence-derived claims; mock composition and live-output grounding use the same contract."""
+"""SQL/joint-diagnosis evidence templates. Pure RAG uses rag_generation, not this renderer."""
 
 from app.schemas.models import Claim, Hypothesis, NetworkReport, RagResult, SqlResult
 
 
 def evidence_report(payload: dict) -> NetworkReport:
     route = payload["route"]
+    if route == "rag":
+        raise ValueError("Pure RAG reports must use the agentic parent-source generation pipeline")
     rag = RagResult.model_validate(payload["rag_result"]) if payload.get("rag_result") else None
     sql = SqlResult.model_validate(payload["sql_result"]) if payload.get("sql_result") else None
     facts, hypotheses, refs, limitations, freshness = [], [], [], [], []
@@ -19,6 +21,13 @@ def evidence_report(payload: dict) -> NetworkReport:
             refs.append(query.query_id)
             if query.data_freshness_utc:
                 freshness.append(f"{query.query_id}: {query.data_freshness_utc} UTC")
+            if query.semantics:
+                semantics = query.semantics
+                prefix = "默认口径" if semantics.selection_source == "default" else "已选口径"
+                limitations.append(
+                    f"{prefix} v{semantics.catalog_version} / {semantics.label}：{query.description}；{semantics.unit_interpretation}；{semantics.null_policy}；{semantics.time_policy}。"
+                )
+                limitations.extend(semantics.limitations)
             for row in query.rows:
                 if query.metric == "alarm_events":
                     text = f"{row['hostname']} 在 {row['occurred_at']} UTC 出现 {row['severity']} / {row['alarm_type']} 告警（alarm_id={row['alarm_id']}）。"
@@ -34,8 +43,27 @@ def evidence_report(payload: dict) -> NetworkReport:
                 elif query.metric == "incident_summaries":
                     text = f"事件 {row['incident_id']}：{row['hostname']}，开始于 {row['started_at']} UTC，现象：{row['symptom']}。"
                 else:
-                    text = f"{row['hostname']} / {row['interface_name']} 的 {query.metric} 等权采样均值为 {row['average_value']:.3f} {query.unit}，范围 {row['min_value']:.3f}–{row['max_value']:.3f} {query.unit}，采样数 {row['sample_count']}。"
-                    metric_rows.setdefault(row["hostname"], {})[query.metric] = (
+                    target = row["hostname"] + (
+                        f" / {row.get('interface_name') or '未标注接口'}"
+                        if "interface_name" in row
+                        else "（设备级）"
+                    )
+                    method = (
+                        "先算接口均值再按接口等权平均"
+                        if query.semantics and query.semantics.aggregation == "interface_mean"
+                        else "采样点等权均值"
+                    )
+                    label = query.semantics.label if query.semantics else query.metric
+                    interface_count = (
+                        f"，参与计算接口数 {row['interface_count']}"
+                        if "interface_count" in row
+                        else ""
+                    )
+                    text = f"{target} 的 {label} {method}为 {row['average_value']:.3f} {query.unit}，原始采样范围 {row['min_value']:.3f}–{row['max_value']:.3f} {query.unit}，非空采样数 {row['sample_count']}{interface_count}。"
+                    # Do not mix loss on one interface with latency/utilization on another.
+                    metric_rows.setdefault((row["hostname"], row.get("interface_name")), {})[
+                        query.metric
+                    ] = (
                         row,
                         query.query_id,
                     )
@@ -43,18 +71,11 @@ def evidence_report(payload: dict) -> NetworkReport:
     if rag:
         limitations.extend(rag.missing_evidence)
         for citation in rag.citations:
-            refs.append(citation.chunk_id)
-            if route == "rag":
-                facts.append(
-                    Claim(
-                        text=f"知识来源《{citation.title}》/{citation.section}: {citation.text}",
-                        evidence_refs=[citation.chunk_id],
-                    )
-                )
+            refs.extend(citation.matched_child_ids or [citation.chunk_id])
             freshness.append(f"{citation.doc_id}: 文档更新 {citation.updated_at}")
     # These thresholds illustrate fixture hypotheses, not universal operating limits.
     if route == "both" and sql and rag and rag.citations:
-        for device, metrics in metric_rows.items():
+        for (device, _interface), metrics in metric_rows.items():
             device_alarms = [(kind, ref) for host, kind, ref in alarms if host == device]
             loss = metrics.get("packet_loss_pct")
             rtt = metrics.get("latency_ms")
@@ -129,13 +150,7 @@ def evidence_report(payload: dict) -> NetworkReport:
         status = "failed"
     else:
         status = "no_evidence"
-    if route == "rag":
-        summary = (
-            "\n".join(f.text for f in facts[:2])
-            if facts
-            else "没有检索到支持该问题的授权文档证据。"
-        )
-    elif facts:
+    if facts:
         summary = "\n".join(f.text for f in facts[:3])
         if route == "both":
             summary += "\n" + (

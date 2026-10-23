@@ -10,6 +10,8 @@ from app.graph.workflow import WorkflowService
 from app.observability.tracing import RequestTrace
 from app.rag.management import KnowledgeManager
 from app.schemas.context import InvocationContext
+from app.schemas.governance import CaseVerify
+from app.schemas.metric_review import PublishMetricInput, QueryReviewInput
 from app.schemas.models import Scope
 from app.security.auth import Principal
 from app.storage.checkpoint import postgres_resources
@@ -32,6 +34,7 @@ async def service(**overrides):
         data_backend="mysql",
         persistence_backend="postgres",
         embedding_mode="mock",
+        rag_vector_backend="memory",
         **overrides,
     )
     async with postgres_resources(settings) as (pool, saver):
@@ -171,3 +174,81 @@ def test_uploaded_knowledge_survives_new_process_resources(request, tmp_path):
 
     run(restore())
     assert not list(tmp_path.iterdir())
+
+
+def test_review_and_published_metric_survive_new_process_resources(request):
+    enabled(request)
+    actor = Principal("review-restart-" + uuid4().hex, "engineer", Scope())
+
+    async def first_process():
+        async with service(text_to_sql_enabled=True) as app:
+            sid = (await app.sessions.create(actor, "metric review", "Asia/Shanghai"))["session_id"]
+            result = await app.chat(
+                actor, sid, "查询 R2 昨天按平均丢包率排名前3的接口", "Asia/Shanghai"
+            )
+            assert result["status"] == "partial"
+            rid = result["request_id"]
+            qid = result["evidence"]["generated_sql"]["queries"][0]["query_id"]
+            await app.metric_reviews.review(
+                actor, rid, qid, QueryReviewInput(verdict="approved", expected_revision=0)
+            )
+            metric = await app.metric_reviews.publish(
+                actor,
+                rid,
+                qid,
+                PublishMetricInput(
+                    label="重启验收接口排名",
+                    description="按接口采样等权平均丢包率，降序返回前三项。",
+                    review_revision=1,
+                    confirm_contract=True,
+                ),
+            )
+            return sid, rid, qid, metric["metric_id"], result["governance_feedback"]["case_ids"][0]
+
+    sid, rid, qid, metric_id, case_id = run(first_process())
+
+    async def second_process():
+        async with service(text_to_sql_enabled=False) as app:
+            try:
+                review = await app.metric_reviews.get_review(actor, rid, qid)
+                assert review["verdict"] == "approved" and review["revision"] == 1
+                assert (await app.metric_reviews.list_metrics(actor))[0]["metric_id"] == metric_id
+                result = await app.chat(
+                    actor, sid, "查询指标「重启验收接口排名」 R3 昨天", "Asia/Shanghai"
+                )
+                assert result["status"] == "completed" and result["query_path"] == "reviewed_metric"
+                assert (
+                    result["evidence"]["reviewed_metric"]["queries"][0]["rows"][0]["hostname"]
+                    == "R3"
+                )
+                case = await app.governance.get(actor, case_id)
+                verified = await app.governance.verify(
+                    actor,
+                    case_id,
+                    CaseVerify(
+                        expected_revision=case["revision"],
+                        proof_request_id=result["request_id"],
+                        resolution_kind="published_metric",
+                        metric_id=metric_id,
+                        note="重建资源后已重新查询并核对正式指标证据。",
+                        confirm_scope=True,
+                    ),
+                )
+                assert verified["verified"] and verified["case"]["status"] == "resolved"
+                await app.metric_reviews.review(
+                    actor,
+                    rid,
+                    qid,
+                    QueryReviewInput(verdict="changes_requested", expected_revision=1),
+                )
+                assert not await app.metric_reviews.list_metrics(actor)
+                assert (await app.governance.get(actor, case_id))["status"] == "open"
+            finally:
+                await app.delete_session(actor, sid)
+                async with app.sessions.pool.connection() as connection:
+                    await connection.execute(
+                        "DELETE FROM aiops_metric_governance WHERE owner_id=%s AND tenant_id=%s AND scope_hash=%s",
+                        (actor.user_id, actor.scope.tenant_id, actor.scope_hash),
+                    )
+
+    run(second_process())

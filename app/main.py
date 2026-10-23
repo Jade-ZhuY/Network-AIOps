@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
+from copy import deepcopy
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
@@ -10,9 +11,13 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.config import ROOT, Settings
 from app.graph.workflow import WorkflowService
 from app.rag.management import KnowledgeManager
+from app.schemas.governance import CaseKind, CaseStatus, CaseUpdate, CaseVerify
+from app.schemas.metric_review import PublishMetricInput, QueryReviewInput
 from app.schemas.models import AnalyzeRequest, ChatRequest, Scope, SessionCreate
 from app.security.auth import Principal, admin_principal, current_principal
+from app.semantics.catalog import public_catalog
 from app.storage.checkpoint import postgres_resources
+from app.storage.metric_governance import GovernanceCapacityExceeded, GovernanceStorageUnavailable
 from app.storage.sessions import (
     MemorySessions,
     PostgresSessions,
@@ -23,6 +28,7 @@ from app.storage.sessions import (
 
 User = Annotated[Principal, Depends(current_principal)]
 Admin = Annotated[Principal, Depends(admin_principal)]
+FRONTEND_DIST = ROOT / "app" / "web" / "dist"
 
 
 def create_app(settings: Settings | None = None):
@@ -38,15 +44,13 @@ def create_app(settings: Settings | None = None):
             elif settings.persistence_backend == "memory":
                 saver, sessions = InMemorySaver(), MemorySessions()
             service = WorkflowService(settings, saver, sessions)
+            stack.callback(service.close)
             app.state.service = service
             app.state.settings = settings
             if sessions is not None:
                 app.state.knowledge = KnowledgeManager(service, sessions, settings)
                 await app.state.knowledge.rebuild()
-            try:
-                yield
-            finally:
-                service.close()
+            yield
 
     api = FastAPI(
         title="Network AIOps",
@@ -66,12 +70,24 @@ def create_app(settings: Settings | None = None):
             )
         return response
 
-    if (ROOT / "app" / "web").is_dir():
-        api.mount("/static", StaticFiles(directory=ROOT / "app" / "web"), name="static")
+    # React assets are built separately; never serve TypeScript source or credentials.
+    # Hash routing keeps direct links compatible with both FastAPI and a future Java host.
+    frontend_dist = FRONTEND_DIST
+    if frontend_dist.is_dir():
+        api.mount("/static", StaticFiles(directory=frontend_dist), name="static")
 
-        @api.get("/", include_in_schema=False)
-        async def index():
-            return FileResponse(ROOT / "app" / "web" / "index.html")
+    @api.get("/", include_in_schema=False)
+    async def index():
+        entry = frontend_dist / "index.html"
+        if entry.is_file():
+            return FileResponse(entry, headers={"Cache-Control": "no-cache"})
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "frontend_build_required",
+                "message": "React 工作台尚未构建。请在 frontend 目录执行 npm ci 和 npm run build，然后重启后端；或使用 npm run dev 开发。",
+            },
+        )
 
     @api.get("/health")
     @api.get("/api/v1/health")
@@ -84,10 +100,12 @@ def create_app(settings: Settings | None = None):
                 {},
                 Scope(),
             )
-            ready = bool(service.retriever.chunks)
+            ready = bool(service.retriever.children)
+            await asyncio.to_thread(service.retriever.healthcheck)
             if settings.persistence_backend == "postgres":
                 async with service.sessions.pool.connection() as connection:
                     await connection.execute("SELECT 1 FROM aiops_sessions LIMIT 1")
+                    await connection.execute("SELECT 1 FROM aiops_metric_governance LIMIT 1")
         except Exception:
             ready = False
         return JSONResponse(
@@ -108,7 +126,15 @@ def create_app(settings: Settings | None = None):
                 if service.runtime.last_model_ok_at
                 else "configured_not_probed",
                 "embedding": settings.embedding_mode,
+                "document_parser": "mineru",
+                "document_parser_version": settings.mineru_expected_version,
+                "vector_backend": settings.rag_vector_backend,
+                "vector_collection": settings.milvus_collection
+                if settings.rag_vector_backend == "milvus"
+                else None,
                 "data_kind": "demo",
+                "text_to_sql_enabled": settings.text_to_sql_enabled,
+                "metric_review_storage": settings.persistence_backend,
                 "demo_now": settings.demo_now.isoformat(),
             },
         )
@@ -137,6 +163,44 @@ def create_app(settings: Settings | None = None):
             content={"detail": "Investigation concurrency limit reached"},
             headers={"Retry-After": "2"},
         )
+
+    @api.exception_handler(GovernanceStorageUnavailable)
+    async def governance_unavailable(request, exc):
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "指标审核存储未就绪，请检查 PostgreSQL 连接并执行显式迁移。"},
+        )
+
+    @api.exception_handler(GovernanceCapacityExceeded)
+    async def governance_capacity(request, exc):
+        return JSONResponse(
+            status_code=409, content={"detail": "当前身份的治理记录已达容量上限，需要归档后继续。"}
+        )
+
+    @api.get("/api/v1/metrics")
+    async def metric_definitions(principal: User):
+        """Public metric definitions only; no business rows, credentials or base tables."""
+        catalog = public_catalog()
+        catalog["capabilities"]["fallback_connected"] = settings.text_to_sql_enabled
+        if api.state.service.metric_reviews:
+            catalog["reviewed_metrics"] = await api.state.service.metric_reviews.list_metrics(
+                principal
+            )
+        return catalog
+
+    @api.post("/api/v1/metrics/resolve")
+    async def resolve_metrics(request: AnalyzeRequest, principal: User):
+        try:
+            return await api.state.service.resolve_metrics(
+                request.message, request.timezone, principal
+            )
+        except RequestCapacity:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "metric_planning_failed", "error_type": type(exc).__name__},
+            ) from None
 
     if settings.persistence_backend != "none":
 
@@ -169,9 +233,9 @@ def create_app(settings: Settings | None = None):
             principal: User,
             limit: int = Query(200, ge=1, le=200),
         ):
-            return {
-                "messages": await api.state.service.sessions.messages(session_id, principal, limit)
-            }
+            rows = await api.state.service.sessions.messages(session_id, principal, limit)
+            rows = await api.state.service.decorate_history(principal, rows)
+            return {"messages": rows}
 
         @api.post("/api/v1/chat")
         async def chat(request: ChatRequest, principal: User):
@@ -212,7 +276,89 @@ def create_app(settings: Settings | None = None):
 
         @api.get("/api/v1/requests/{request_id}")
         async def request_detail(request_id: str, principal: User):
-            return await api.state.service.sessions.request(request_id, principal)
+            row = deepcopy(await api.state.service.sessions.request(request_id, principal))
+            if row.get("response"):
+                row["response"] = await api.state.service.decorate_response(
+                    principal, row["response"]
+                )
+            return row
+
+        @api.get("/api/v1/requests/{request_id}/queries/{query_id}/review")
+        async def query_review(request_id: str, query_id: str, principal: User):
+            return await api.state.service.metric_reviews.get_review(
+                principal, request_id, query_id
+            )
+
+        @api.put("/api/v1/requests/{request_id}/queries/{query_id}/review")
+        async def review_query(
+            request_id: str, query_id: str, request: QueryReviewInput, principal: User
+        ):
+            return await api.state.service.metric_reviews.review(
+                principal, request_id, query_id, request
+            )
+
+        @api.get("/api/v1/requests/{request_id}/queries/{query_id}/metric-candidate")
+        async def metric_candidate(request_id: str, query_id: str, principal: User):
+            return await api.state.service.metric_reviews.candidate(principal, request_id, query_id)
+
+        @api.post("/api/v1/requests/{request_id}/queries/{query_id}/metric", status_code=201)
+        async def publish_query_metric(
+            request_id: str, query_id: str, request: PublishMetricInput, principal: User
+        ):
+            return await api.state.service.metric_reviews.publish(
+                principal, request_id, query_id, request
+            )
+
+        @api.get("/api/v1/metrics/reviewed")
+        async def reviewed_metrics(principal: User, include_inactive: bool = False):
+            return {
+                "metrics": await api.state.service.metric_reviews.list_metrics(
+                    principal, include_inactive=include_inactive
+                ),
+                "storage": settings.persistence_backend,
+                "durable": settings.persistence_backend == "postgres",
+            }
+
+        @api.delete("/api/v1/metrics/reviewed/{metric_id}")
+        async def withdraw_metric(metric_id: str, principal: User, version: int = Query(ge=1)):
+            return await api.state.service.metric_reviews.withdraw(principal, metric_id, version)
+
+        @api.get("/api/v1/governance/cases")
+        async def governance_cases(
+            principal: User,
+            status: CaseStatus | None = None,
+            kind: CaseKind | None = None,
+            offset: int = Query(0, ge=0, le=10000),
+            limit: int = Query(30, ge=1, le=100),
+        ):
+            result = await api.state.service.governance.list(principal, status, kind, offset, limit)
+            return {
+                **result,
+                "storage": settings.persistence_backend,
+                "durable": settings.persistence_backend == "postgres",
+            }
+
+        @api.get("/api/v1/governance/cases/{case_id}")
+        async def governance_case(case_id: str, principal: User):
+            return await api.state.service.governance.get(principal, case_id)
+
+        @api.patch("/api/v1/governance/cases/{case_id}")
+        async def update_governance_case(case_id: str, request: CaseUpdate, principal: User):
+            return await api.state.service.governance.update(principal, case_id, request)
+
+        @api.post("/api/v1/governance/cases/{case_id}/verify")
+        async def verify_governance_case(case_id: str, request: CaseVerify, principal: User):
+            async with api.state.service.request_slot():
+                return await api.state.service.governance.verify(principal, case_id, request)
+
+        @api.post("/api/v1/governance/capture/{request_id}")
+        async def capture_governance_request(request_id: str, principal: User):
+            return await api.state.service.governance.capture(principal, request_id)
+
+        @api.post("/api/v1/governance/collect")
+        async def collect_governance(principal: User, limit: int = Query(20, ge=1, le=50)):
+            async with api.state.service.request_slot():
+                return await api.state.service.governance.collect_recent(principal, limit)
 
         @api.get("/api/v1/admin/audit")
         async def audit(principal: Admin, limit: int = Query(50, ge=1, le=200)):

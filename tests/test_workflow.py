@@ -62,10 +62,10 @@ async def test_both_barrier_waits_for_slow_branch(service, monkeypatch):
 
     original_report = service.runtime.report
 
-    async def checked_report(payload):
+    async def checked_report(payload, **kwargs):
         assert completed == ["sql"]
         assert payload["rag_result"] and payload["sql_result"]
-        return await original_report(payload)
+        return await original_report(payload, **kwargs)
 
     monkeypatch.setattr(service.runtime, "sql", delayed)
     monkeypatch.setattr(service.runtime, "report", checked_report)
@@ -159,7 +159,7 @@ async def test_both_sides_fail_once(service, monkeypatch):
 
 
 async def test_supervisor_and_report_errors_explicit(service, monkeypatch):
-    async def fail(*args):
+    async def fail(*args, **kwargs):
         raise ValueError("secret provider details")
 
     monkeypatch.setattr(service.runtime, "report", fail)

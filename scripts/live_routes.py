@@ -1,9 +1,8 @@
-"""Opt-in 60-case real Supervisor component regression, bounded concurrency."""
+"""Opt-in 60-case real metric-intent Supervisor regression, bounded concurrency."""
 
 import asyncio
 import json
 
-from app.agents.planning import build_route_plan
 from app.agents.runtime import AgentRuntime
 from app.config import ROOT, Settings
 
@@ -18,9 +17,10 @@ async def main():
 
     async def probe(case):
         async with slots:
-            baseline = build_route_plan(case["question"], settings.demo_now, "Asia/Shanghai")
             try:
-                plan = await runtime.supervisor(baseline)
+                plan = await runtime.plan_request(
+                    case["question"], settings.demo_now, "Asia/Shanghai"
+                )
                 return {
                     "case_id": case["case_id"],
                     "expected": case["expected_route"],
@@ -38,13 +38,13 @@ async def main():
 
     results = await asyncio.gather(*(probe(case) for case in cases))
     report = {
-        "mode": "live_supervisor_component",
+        "mode": "live_metric_supervisor_component",
         "model": settings.llm_model,
         "cases": len(results),
         "passed": sum(row["ok"] for row in results),
         "accuracy": sum(row["ok"] for row in results) / len(results),
         "limitations": [
-            "Supervisor is a hybrid validated planner plus live structured decision, not an unrestricted LLM classifier",
+            "LLM proposes metric intent; server grounding, semantic and capability checks decide execution eligibility",
             "This component regression does not measure whole-workflow latency or fault-diagnosis generalization",
         ],
         "failures": [row for row in results if not row["ok"]],

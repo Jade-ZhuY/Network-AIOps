@@ -1,6 +1,7 @@
 """Offline tool-calling model, exercising the REAL LangChain agent loop."""
 
 import json
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -40,6 +41,68 @@ class MockNetworkModel(BaseChatModel):
                 name, arguments = "search_network_knowledge", {"question": payload["task"]}
             else:
                 name, arguments = "RagResult", completed["search_network_knowledge"]
+        elif self.role == "sql" and payload.get("phase") == "generate_sql":
+            # Explicit SQL-authoring fixture, never a live-provider failure fallback.
+            q = payload["question"]
+            numeric = next(
+                (
+                    metric
+                    for pattern, metric in (
+                        (r"丢包|掉包|loss", "packet_loss_pct"),
+                        (r"RTT|时延|延迟|latency", "latency_ms"),
+                        (r"利用率|utilization", "utilization_pct"),
+                    )
+                    if re.search(pattern, q, re.I)
+                ),
+                None,
+            )
+            draft = {
+                "disposition": "query",
+                "sql": "",
+                "parameters": {},
+                "description": "显式 mock SQL 生成替身",
+                "assumptions": ["Mock 生成器用于工程回归，不代表真实模型理解质量。"],
+            }
+            if numeric and re.search(r"趋势|每小时|按小时|hourly|trend", q, re.I):
+                draft["sql"] = (
+                    f"SELECT hostname, interface_name, DATE_FORMAT(sample_time, '%Y-%m-%d %H:00:00') AS bucket_utc, AVG({numeric}) AS average_value, COUNT({numeric}) AS sample_count FROM v_interface_metrics GROUP BY hostname, interface_name, bucket_utc ORDER BY bucket_utc, hostname, interface_name"
+                )
+            elif numeric and re.search(r"排名|排行|前\s*\d|top\s*\d", q, re.I):
+                count = re.search(r"(?:前\s*|top\s*)(\d+)", q, re.I)
+                draft["sql"] = (
+                    f"SELECT hostname, interface_name, AVG({numeric}) AS average_value, COUNT({numeric}) AS sample_count FROM v_interface_metrics GROUP BY hostname, interface_name ORDER BY average_value DESC, hostname, interface_name LIMIT {int(count[1]) if count else 5}"
+                )
+            elif numeric and re.search(r"超过|大于|高于|above|greater", q, re.I):
+                value = re.search(
+                    r"(?:超过|大于|高于|above|greater than)\s*(\d+(?:\.\d+)?)", q, re.I
+                )
+                if value:
+                    draft["parameters"] = {"value_0": float(value[1])}
+                    draft["sql"] = (
+                        f"SELECT hostname, interface_name, AVG({numeric}) AS average_value FROM v_interface_metrics GROUP BY hostname, interface_name HAVING AVG({numeric})>:value_0 ORDER BY average_value DESC"
+                    )
+            elif re.search(r"告警|alarm", q, re.I) and re.search(
+                r"类型|severity|级别|alarm.type", q, re.I
+            ):
+                group = "alarm_type" if re.search(r"类型|alarm.type", q, re.I) else "severity"
+                draft["sql"] = (
+                    f"SELECT {group}, COUNT(*) AS alarm_count FROM v_alarm_events GROUP BY {group} ORDER BY alarm_count DESC, {group}"
+                )
+            elif numeric and re.search(r"原始|采样明细|raw", q, re.I):
+                draft["sql"] = (
+                    f"SELECT hostname, interface_name, sample_time, {numeric} FROM v_interface_metrics ORDER BY sample_time, hostname, interface_name"
+                )
+            else:
+                draft.update(
+                    disposition="unavailable",
+                    reason="显式 mock 替身没有为该问法设置 SQL 生成响应。",
+                )
+            if not draft["sql"]:
+                draft.update(
+                    disposition="unavailable",
+                    reason=draft.get("reason", "未找到可用的单视图 SQL 形状。"),
+                )
+            name, arguments = "GeneratedSqlDraft", draft
         elif self.role == "sql":
             if "get_schema" not in completed:
                 name, arguments = "get_schema", {}
@@ -47,6 +110,33 @@ class MockNetworkModel(BaseChatModel):
                 name, arguments = "query_network_metrics", {}
             else:
                 name, arguments = "SqlResult", completed["query_network_metrics"]
+        elif self.role == "report" and payload.get("phase") == "rag_generate":
+            # Explicit offline fixture, not a claim of natural-language model quality.
+            paragraphs = []
+            for source in payload.get("knowledge_context", [])[:2]:
+                quote = source["content"].strip()[:160]
+                if quote:
+                    paragraphs.append(
+                        {
+                            "text": "Mock 演示摘录：" + quote,
+                            "evidence": [{"source_id": source["source_id"], "quote": quote}],
+                        }
+                    )
+            name, arguments = (
+                "RagAnswerDraft",
+                {
+                    "status": "answered" if paragraphs else "insufficient_context",
+                    "paragraphs": paragraphs,
+                    "missing_information": []
+                    if paragraphs
+                    else ["当前检索资料没有提供该问题的依据。"],
+                },
+            )
+        elif self.role == "report" and payload.get("phase") == "rag_review":
+            name, arguments = (
+                "RagAnswerReview",
+                {"approved": True, "feedback": "Deterministic test fixture only"},
+            )
         elif self.role == "report":
             name, arguments = "NetworkReport", payload["allowed_report"]
         else:

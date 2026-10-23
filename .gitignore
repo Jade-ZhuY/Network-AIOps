@@ -15,5 +15,14 @@ build/
 *.sqlite*
 outputs/
 data/uploads/
+data/parsed/
+data/parents/
 playwright-results/
+frontend/node_modules/
+frontend/coverage/
+frontend/.vite/
+*.tsbuildinfo
+java-backend/target/
+java-backend/data/
+java-backend/.local/
 *.log

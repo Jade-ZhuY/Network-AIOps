@@ -1,4 +1,6 @@
 import asyncio
+import json
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -7,6 +9,7 @@ from fastapi import HTTPException
 
 from app.rag.hybrid_retrieval import HybridRetriever
 from app.rag.ingestion import load_documents, parse_document
+from app.rag.mineru_client import SUPPORTED_SUFFIXES, purge_parsed_artifacts
 from app.security.redaction import redact_sensitive_text
 from app.storage.documents import DocumentStore
 
@@ -34,20 +37,28 @@ class KnowledgeManager:
     async def list(self, principal):
         rows = []
         seed = {}
-        for chunk in load_documents(self.settings.knowledge_dir):
-            if set(chunk.access_scope).intersection(principal.scope.knowledge_groups):
+        counts = {}
+        for child in self.service.retriever.children:
+            doc_id = child.metadata["doc_id"]
+            counts[doc_id] = counts.get(doc_id, 0) + 1
+        metadata = json.loads(
+            (self.settings.knowledge_dir / "metadata.json").read_text(encoding="utf-8")
+        )
+        for item in metadata.values():
+            if counts.get(item["doc_id"]) and set(item["access_scope"]).intersection(
+                principal.scope.knowledge_groups
+            ):
                 seed.setdefault(
-                    chunk.doc_id,
+                    item["doc_id"],
                     dict(
-                        doc_id=chunk.doc_id,
-                        title=chunk.title,
+                        doc_id=item["doc_id"],
+                        title=redact_sensitive_text(item["title"]),
                         status="ready",
                         builtin=True,
-                        chunk_count=0,
-                        created_at=chunk.updated_at,
+                        chunk_count=counts[item["doc_id"]],
+                        created_at=item["updated_at"],
                     ),
                 )
-                seed[chunk.doc_id]["chunk_count"] += 1
         rows.extend(seed.values())
         rows.extend(
             {**row, "builtin": False}
@@ -65,7 +76,9 @@ class KnowledgeManager:
 
     async def rebuild(self):
         async with self.lock:
-            chunks = load_documents(self.settings.knowledge_dir)
+            chunks = await asyncio.to_thread(
+                load_documents, self.settings.knowledge_dir, self.settings
+            )
             for row in await self.store.all():
                 if row["status"] == "ready":
                     path = self.path(row["filename"])
@@ -77,17 +90,28 @@ class KnowledgeManager:
                             "updated_at": row["created_at"],
                             "access_scope": row["access_scope"],
                         }
-                        chunks.extend(await asyncio.to_thread(parse_document, path, metadata))
+                        parsed = await asyncio.to_thread(
+                            parse_document, path, metadata, settings=self.settings
+                        )
+                        chunks["parents"].extend(parsed["parents"])
+                        chunks["children"].extend(parsed["children"])
             retriever = await asyncio.to_thread(
-                HybridRetriever, chunks, self.settings, self.service.retriever.embedding
+                HybridRetriever,
+                chunks,
+                self.settings,
+                self.service.retriever.embedding,
+                store=self.service.retriever.store,
+                parent_store=self.service.retriever.parent_store,
+                prune=True,
             )
             self.service.retriever = self.service.runtime.retriever = retriever
 
     async def upload(self, filename, title, content, principal):
         suffix = Path(filename).suffix.lower()
-        if suffix not in (".md", ".txt", ".pdf"):
+        if suffix not in SUPPORTED_SUFFIXES:
             raise HTTPException(
-                status_code=415, detail="Supported files: Markdown, UTF-8 text, PDF"
+                status_code=415,
+                detail="Supported files: PDF, Markdown/TXT, HTML, DOCX/PPTX/XLSX, PNG/JPEG/WebP",
             )
         if not content or len(content) > self.settings.upload_max_bytes:
             raise HTTPException(status_code=413, detail="Empty file or upload size exceeded")
@@ -119,14 +143,33 @@ class KnowledgeManager:
                 "updated_at": row["created_at"],
                 "access_scope": row["access_scope"],
             }
-            chunks = await asyncio.to_thread(parse_document, path, metadata)
-            if not chunks or len(chunks) > 500:
+            chunks = await asyncio.to_thread(parse_document, path, metadata, settings=self.settings)
+            if not chunks["children"] or len(chunks["children"]) > 500:
                 raise ValueError("Document has no text or exceeds 500 chunks")
-            row.update(status="ready", chunk_count=len(chunks))
-            await self.store.save(row)
-            await self.rebuild()
+            if self.service.retriever.store:
+                async with self.lock:
+                    # Only the new document is embedded; existing rows stay untouched.
+                    retriever = await asyncio.to_thread(
+                        HybridRetriever,
+                        chunks,
+                        self.settings,
+                        self.service.retriever.embedding,
+                        store=self.service.retriever.store,
+                    )
+                    row.update(status="ready", chunk_count=len(chunks["children"]))
+                    await self.store.save(row)
+                    self.service.retriever = self.service.runtime.retriever = retriever
+            else:
+                row.update(status="ready", chunk_count=len(chunks["children"]))
+                await self.store.save(row)
+                await self.rebuild()
             return {**row, "builtin": False}
         except Exception as exc:
+            if self.service.retriever.store:
+                # Upload IDs are server-generated. Best-effort compensation for this upload only.
+                # A later authoritative rebuild also prunes orphan rows after a failed write.
+                with suppress(Exception):
+                    await asyncio.to_thread(self.service.retriever.store.delete_document, doc_id)
             row.update(status="failed", error_type=type(exc).__name__)
             await self.store.save(row)
             raise HTTPException(
@@ -141,6 +184,23 @@ class KnowledgeManager:
                 status_code=409, detail="Built-in demonstration references are read-only"
             )
         path = self.path(row["filename"])
+        if self.service.retriever.store:
+            async with self.lock:
+                await asyncio.to_thread(self.service.retriever.store.delete_document, doc_id)
+                await self.store.delete(doc_id)
+                await asyncio.to_thread(purge_parsed_artifacts, path, self.settings)
+                path.unlink(missing_ok=True)
+                retriever = await asyncio.to_thread(
+                    HybridRetriever,
+                    {"parents": [], "children": []},
+                    self.settings,
+                    self.service.retriever.embedding,
+                    store=self.service.retriever.store,
+                )
+                self.service.retriever = self.service.runtime.retriever = retriever
+            return
+        await asyncio.to_thread(self.service.retriever.parent_store.delete_document, doc_id)
         await self.store.delete(doc_id)
+        await asyncio.to_thread(purge_parsed_artifacts, path, self.settings)
         path.unlink(missing_ok=True)
         await self.rebuild()

@@ -5,6 +5,16 @@ from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.schemas.models import QueryPlan, RoutePlan
+from app.semantics.capabilities import DIAGNOSTIC
+from app.semantics.catalog import CATALOG_VERSION, DEFINITIONS
+from app.semantics.matching import classify_rule_plan, stopped_plan
+from app.semantics.models import MetricMatch, SemanticIssue
+from app.semantics.resolution import (
+    is_semantic_reply,
+    request_issues,
+    resolve_options,
+    validate_plan_semantics,
+)
 
 MUTATION = re.compile(
     r"删除|修改|清空|重置|系统账号|密码|\b(drop|delete|truncate|update|insert)\b|;\s*select|--|/\*",
@@ -13,6 +23,31 @@ MUTATION = re.compile(
 
 
 def resolve_window(question: str, now: datetime, timezone: str):
+    question = re.sub(r"昨日|昨儿个|昨儿", "昨天", question)
+    question = re.sub(r"今日", "今天", question)
+    question = re.sub(
+        r"(\d{4})年(\d{1,2})月(\d{1,2})日",
+        lambda m: f"{int(m[1]):04d}-{int(m[2]):02d}-{int(m[3]):02d}",
+        question,
+    )
+    numerals = {
+        "一": 1,
+        "二": 2,
+        "两": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+        "十": 10,
+    }
+    question = re.sub(
+        r"(最近|过去)\s*([一二两三四五六七八九十])\s*(小时|天)",
+        lambda m: f"{m[1]}{numerals[m[2]]}{m[3]}",
+        question,
+    )
     zone = ZoneInfo(timezone)
     local_now = now.astimezone(zone)
     dates = re.findall(r"(?<![0-9])\d{4}-\d{2}-\d{2}(?![0-9])", question)
@@ -25,8 +60,21 @@ def resolve_window(question: str, now: datetime, timezone: str):
         )
         start = datetime.combine(start_day, time.min, zone)
         end = datetime.combine(end_day, time.min, zone)
-    elif "昨天" in question or "yesterday" in question.lower():
-        day = local_now.date() - timedelta(days=1)
+    elif any(term in question for term in ("上周", "本周", "这周", "上个月", "本月", "这个月")):
+        day = local_now.date()
+        if any(term in question for term in ("上周", "本周", "这周")):
+            monday = day - timedelta(days=day.weekday())
+            start_day = monday - timedelta(days=7) if "上周" in question else monday
+            end = datetime.combine(monday, time.min, zone) if "上周" in question else local_now
+        else:
+            first = day.replace(day=1)
+            start_day = (
+                (first - timedelta(days=1)).replace(day=1) if "上个月" in question else first
+            )
+            end = datetime.combine(first, time.min, zone) if "上个月" in question else local_now
+        start = datetime.combine(start_day, time.min, zone)
+    elif "前天" in question or "昨天" in question or "yesterday" in question.lower():
+        day = local_now.date() - timedelta(days=2 if "前天" in question else 1)
         start, end = (
             datetime.combine(day, time.min, zone),
             datetime.combine(day + timedelta(days=1), time.min, zone),
@@ -41,16 +89,38 @@ def resolve_window(question: str, now: datetime, timezone: str):
             if not 1 <= hours <= 720:
                 raise ValueError("Time window outside 1–720 hours")
             return now - timedelta(hours=hours), now
+        days = re.search(r"(?:最近|过去|last|past)\s*(\d+)\s*(?:天|days?)", question, re.I)
+        if days:
+            count = int(days[1])
+            if not 1 <= count <= 30:
+                raise ValueError("Time window outside 1–30 days")
+            return now - timedelta(days=count), now
         if any(term in question for term in ("最近一天", "最近24小时", "过去一天")):
             return now - timedelta(days=1), now
         return None, None
     if "下午" in question or "afternoon" in question.lower():
         start = datetime.combine(start.date(), time(12), zone)
         end = datetime.combine(start.date(), time(18), zone)
+    elif re.search(r"上午|晚上|傍晚|凌晨|中午", question):
+        raise ValueError("Specify exact clock boundaries for this part of day")
+    clocks = re.findall(r"(?<!\d)([01]?\d|2[0-3])(?:[:：]([0-5]\d)|点(?:([0-5]?\d)分?)?)", question)
+    if clocks:
+        if len(clocks) != 2:
+            raise ValueError("Both clock boundaries are required")
+        start = datetime.combine(
+            start.date(), time(int(clocks[0][0]), int(clocks[0][1] or clocks[0][2] or 0)), zone
+        )
+        end = datetime.combine(
+            start.date(), time(int(clocks[1][0]), int(clocks[1][1] or clocks[1][2] or 0)), zone
+        )
+        if end <= start:
+            raise ValueError("Clock boundaries must be ordered within the same day")
+    if end <= start:
+        raise ValueError("End time must follow start time")
     return start.astimezone(UTC), end.astimezone(UTC)
 
 
-def build_route_plan(
+def _build_rule_route_plan(
     question: str,
     now: datetime,
     timezone: str,
@@ -63,12 +133,23 @@ def build_route_plan(
     previous = context_plan
     for index, prior in enumerate(history if context_plan is None else []):
         candidate = build_route_plan(prior, now, timezone, history[:index])
-        if candidate.query_plan and not candidate.needs_clarification:
+        if candidate.query_plan and (
+            not candidate.needs_clarification or candidate.semantic_issues
+        ):
             previous = candidate
     devices = list(dict.fromkeys(re.findall(r"(?<![A-Z0-9])R\d+(?![A-Z0-9])", q.upper())))
     followup = any(
         term in q for term in ("同一时间", "同样", "那", "两台", "它", "呢", "比较")
     ) or any(term in lower for term in ("same time", "what about", "compare"))
+    pending_semantics = bool(previous and previous.semantic_issues and previous.query_plan)
+    semantic_reply = previous is not None and (
+        is_semantic_reply(q)
+        or any(q == choice for issue in previous.semantic_issues for choice in issue.choices)
+    )
+    if semantic_reply or (
+        pending_semantics and not any(d.matches(q) for d in DEFINITIONS.values())
+    ):
+        followup = True
     knowledge = any(
         term in lower
         for term in (
@@ -135,6 +216,11 @@ def build_route_plan(
             normalized_question=q,
             sql_task=q,
             query_plan=QueryPlan(metrics=["device_status"]),
+            metric_match=MetricMatch(
+                status="not_applicable",
+                catalog_version=CATALOG_VERSION,
+                reason_codes=["read_only_request_guard"],
+            ),
         )
     inherited = previous.query_plan if followup and previous else None
     if not devices and inherited:
@@ -172,29 +258,57 @@ def build_route_plan(
             if any(term in q for term in ("多少", "数量", "几条", "统计")) or "count" in lower
             else "alarm_events"
         )
-    for terms, metric in (
-        (("接口状态", "interface status"), "interface_status"),
-        (("链路状态", "链路拓扑", "link status", "links"), "link_status"),
-        (("故障记录", "事件记录", "工单", "历史故障", "incidents"), "incident_summaries"),
-        (("丢包", "loss"), "packet_loss_pct"),
-        (("时延", "rtt", "latency"), "latency_ms"),
-        (("利用率", "流量", "utilization", "traffic"), "utilization_pct"),
-        (("设备状态", "device status"), "device_status"),
-    ):
-        if any(term in lower for term in terms):
+    for metric, definition in DEFINITIONS.items():
+        if metric not in ("alarm_count", "alarm_events") and definition.matches(q):
             metrics.append(metric)
-    if route == "both":
+    if route == "both" and (metrics or DIAGNOSTIC.search(q)):
         metrics = list(
             dict.fromkeys(
                 metrics + ["alarm_events", "packet_loss_pct", "latency_ms", "utilization_pct"]
             )
         )
+    if not metrics and inherited and semantic_reply:
+        metrics = inherited.metrics
     if not metrics and ("状态" in q or "status" in lower):
         metrics.append("device_status")
     if not metrics:
-        metrics = inherited.metrics if inherited else ["alarm_events"]
+        metrics = inherited.metrics if inherited else []
+    if not metrics:
+        semantic = request_issues(q, [])
+        if semantic:
+            return RoutePlan(
+                route=route,
+                normalized_question=q,
+                query_plan=QueryPlan(
+                    devices=devices, interface=interface, start_utc=start, end_utc=end, metrics=[]
+                ),
+                needs_clarification=True,
+                semantic_issues=semantic,
+                clarification_question="\n".join(i.message for i in semantic),
+            )
+        if followup:
+            return RoutePlan(
+                route=route,
+                normalized_question=q,
+                needs_clarification=True,
+                clarification_question="请先说明要查询的指标和时间范围，再继续设备追问。",
+            )
+        return stopped_plan(
+            q,
+            route,
+            [
+                SemanticIssue(
+                    code="unknown_metric",
+                    message="问题没有匹配到已定义的指标，本层未命中，不默认改查告警。",
+                )
+            ],
+        )
+    if re.search(r"按设备统计|不限定接口", q):
+        interface = None
     all_devices = (
-        any(term in q for term in ("所有设备", "全网", "全部设备")) or "all devices" in lower
+        any(term in q for term in ("所有设备", "全网", "全部设备"))
+        or "all devices" in lower
+        or bool(inherited and not inherited.devices)
     )
     missing = []
     if not devices and not all_devices:
@@ -211,14 +325,38 @@ def build_route_plan(
             clarification_question="请补充" + "、".join(missing) + "。",
         )
     severity = "critical" if "严重" in q or "critical" in lower else None
+    alarm_metrics = any(metric.startswith("alarm") for metric in metrics)
+    options, _ = resolve_options(q, metrics, inherited.metric_options if inherited else None)
     plan = QueryPlan(
         devices=devices,
         interface=interface,
         start_utc=start,
         end_utc=end,
         metrics=metrics,
-        severity=severity or (inherited.severity if inherited else None),
+        severity=(severity or (inherited.severity if inherited else None))
+        if alarm_metrics
+        else None,
+        alarm_type=inherited.alarm_type if inherited and alarm_metrics else None,
+        metric_options=options,
+        metric_catalog_version=CATALOG_VERSION,
     )
+    issues = validate_plan_semantics(plan, q)
+    # A date/device-only clarification does not silently discard a pending semantic issue.
+    if pending_semantics and followup and not semantic_reply:
+        issues = list(
+            {
+                (issue.code, issue.metric): issue for issue in previous.semantic_issues + issues
+            }.values()
+        )
+    if issues:
+        return RoutePlan(
+            route=route,
+            normalized_question=q,
+            query_plan=plan,
+            needs_clarification=True,
+            semantic_issues=issues,
+            clarification_question="\n".join(issue.message for issue in issues),
+        )
     normalized = q + f" [设备={','.join(devices) or '授权范围全部设备'}; 时区={timezone}"
     if start:
         normalized += f"; UTC时间窗=[{start.isoformat()}, {end.isoformat()})"
@@ -229,4 +367,11 @@ def build_route_plan(
         rag_task=q if route == "both" else None,
         sql_task=normalized,
         query_plan=plan,
+    )
+
+
+def build_route_plan(question, now, timezone, history=None, context_plan=None) -> RoutePlan:
+    """Explicit offline rule fixture; live requests use structured LLM metric intent."""
+    return classify_rule_plan(
+        _build_rule_route_plan(question, now, timezone, history, context_plan), question
     )

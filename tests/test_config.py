@@ -15,6 +15,12 @@ def test_invalid_reasoning_effort_rejected():
         Settings(_env_file=None, llm_reasoning_effort="invalid")
 
 
+@pytest.mark.parametrize("value", [0, -1])
+def test_embedding_batch_size_must_be_positive(value):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, embedding_batch_size=value)
+
+
 def test_example_configuration_starts_offline(monkeypatch):
     for field in Settings.model_fields:
         monkeypatch.delenv(field.upper(), raising=False)
@@ -24,3 +30,15 @@ def test_example_configuration_starts_offline(monkeypatch):
     assert settings.embedding_mode == "mock"
     assert settings.persistence_backend == "none"
     assert settings.llm_reasoning_effort is None
+    assert settings.rag_vector_backend == "memory"
+
+
+def test_sdk_import_preserves_explicit_settings_isolation(monkeypatch):
+    for field in Settings.model_fields:
+        monkeypatch.delenv(field.upper(), raising=False)
+    import pymilvus  # noqa: F401
+
+    settings = Settings(_env_file=None)
+    assert settings.llm_mode == "mock"
+    assert settings.embedding_mode == "mock"
+    assert settings.rag_vector_backend == "memory"

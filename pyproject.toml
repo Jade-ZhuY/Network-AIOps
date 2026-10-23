@@ -15,22 +15,30 @@ dependencies = [
   "sqlalchemy>=2.0,<3",
   "pymysql>=1.1,<2",
   "sqlglot>=26,<31",
-  "rank-bm25>=0.2.2,<1",
-  "pypdf>=5,<7",
   "tzdata>=2025.1",
   "langgraph-checkpoint-postgres>=3.1.2",
   "psycopg[binary,pool]>=3.3.6",
   "python-multipart>=0.0.32",
+  "pymilvus>=2.6,<2.7",
+  "httpx>=0.28,<1",
+  "markdown-it-py>=3,<5",
+  "langchain-text-splitters>=1,<2",
+  "tiktoken>=0.12,<1",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "httpx>=0.28,<1", "ruff>=0.11,<1"]
+dev = [
+    "pypdf>=5,<7",
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.25,<2",
+    "ruff>=0.11,<1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
-markers = ["mysql: opt-in tests against the configured MySQL business fixture database", "postgres: opt-in durable PostgreSQL session tests"]
+markers = ["mysql: opt-in tests against the configured MySQL business fixture database", "postgres: opt-in durable PostgreSQL session tests", "milvus: opt-in tests in isolated Milvus collections", "mineru: opt-in real remote MinerU parser tests", "parent_mysql: opt-in MySQL parent-document persistence tests"]
 
 [tool.ruff]
 target-version = "py312"

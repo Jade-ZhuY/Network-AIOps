@@ -90,12 +90,39 @@ def test_invalid_uploads_and_builtin_protection(tmp_path):
         )
 
 
-def test_static_ui_and_security_headers():
+def test_static_ui_and_security_headers(monkeypatch, tmp_path):
+    import app.main
+
+    dist = tmp_path / "react-dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text(
+        '<!doctype html><html lang="zh-CN"><title>智能运维工作台</title>'
+        '<div id="root"></div><script type="module" src="/static/assets/app.js"></script></html>',
+        encoding="utf-8",
+    )
+    (dist / "assets" / "app.js").write_text("// React test asset", encoding="utf-8")
+    monkeypatch.setattr(app.main, "FRONTEND_DIST", dist)
     with TestClient(create_app(session_settings())) as client:
         response = client.get("/")
         assert response.status_code == 200
-        assert "网络运行工作台" in response.text
+        assert "智能运维工作台" in response.text
+        assert '<div id="root">' in response.text
         assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
-        assert "API_AUTH_TOKEN" in response.text  # variable label, never the actual token.
+        assert response.headers["cache-control"] == "no-cache"
         assert "engineer-test-token" not in response.text
-        assert client.get("/static/app.js").status_code == 200
+        asset = client.get("/static/assets/app.js")
+        assert asset.status_code == 200
+        assert "javascript" in asset.headers["content-type"]
+        assert client.get("/static/../../.env").status_code == 404
+        assert client.get("/static/app.js").status_code == 404
+
+
+def test_frontend_build_missing_does_not_disable_api(monkeypatch, tmp_path):
+    import app.main
+
+    monkeypatch.setattr(app.main, "FRONTEND_DIST", tmp_path / "not-built")
+    with TestClient(create_app(session_settings())) as client:
+        assert client.get("/").status_code == 503
+        assert client.get("/").json()["detail"] == "frontend_build_required"
+        assert client.get("/openapi.json").status_code == 200
+        assert client.get("/api/v1/me", headers=headers()).status_code == 200

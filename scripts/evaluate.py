@@ -43,7 +43,7 @@ def citation_checks(result, source_map):
     citations = (result["evidence"].get("rag") or {}).get("citations", [])
     return [
         citation["chunk_id"] in source_map
-        and citation["text"] == source_map[citation["chunk_id"]].text
+        and citation["text"] == source_map[citation["chunk_id"]].page_content
         for citation in citations
     ]
 
@@ -54,7 +54,7 @@ async def evaluate():
     )
     sessions = MemorySessions()
     service = WorkflowService(settings, InMemorySaver(), sessions)
-    source_map = {chunk.chunk_id: chunk for chunk in service.retriever.chunks}
+    source_map = {child.id: child for child in service.retriever.children}
     counts = {
         "routes": 0,
         "route_correct": 0,

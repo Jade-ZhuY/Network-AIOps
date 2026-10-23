@@ -1,0 +1,14 @@
+[
+  {"id":"semantic_loss","question":"帮我看看 R2 昨天 eth1 的数据包有多大比例没送到","match":"hit","metrics":["packet_loss_pct"],"devices":["R2"],"sql_status":"ok"},
+  {"id":"semantic_rtt","question":"查询二号路由器昨日 eth1 的往返耗时均值","match":"hit","metrics":["latency_ms"],"devices":["R2"],"sql_status":"ok"},
+  {"id":"semantic_port_busy","question":"R4 昨天 eth1 的端口忙碌程度，按采样等权给平均百分比","match":"hit","metrics":["utilization_pct"],"devices":["R4"],"sql_status":"ok"},
+  {"id":"semantic_alarm_count","question":"数数 R2 昨天有几条 critical 警报","match":"hit","metrics":["alarm_count"],"devices":["R2"],"sql_status":"ok"},
+  {"id":"snapshot","question":"查询 R2 设备状态","match":"hit","metrics":["device_status"],"devices":["R2"],"sql_status":"ok"},
+  {"id":"ambiguous_mean","question":"查询 R2 昨天设备整体平均丢包率","match":"clarify"},
+  {"id":"missing_time","question":"查询 R2 eth1 平均丢包率","match":"clarify"},
+  {"id":"unknown_temperature","question":"查询 R2 昨天 CPU 温度","match":"miss"},
+  {"id":"wrong_utilization","question":"查询 R2 昨天 CPU 利用率和丢包率","match":"miss"},
+  {"id":"unsupported_trend","question":"查询 R2 昨天每小时丢包率趋势","match":"miss"},
+  {"id":"unsupported_ranking","question":"查询全网昨天丢包率排名前5的接口","match":"miss"},
+  {"id":"no_data_is_hit","question":"查询 R2 2030-01-01 的丢包率","match":"hit","metrics":["packet_loss_pct"],"devices":["R2"],"sql_status":"no_data"}
+]

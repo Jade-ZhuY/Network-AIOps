@@ -1,5 +1,6 @@
 import re
 import time
+from collections import defaultdict
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -8,8 +9,10 @@ from sqlalchemy.exc import DBAPIError
 from app.schemas.models import QueryEvidence, QueryPlan, Scope, SqlResult
 from app.security.redaction import redact_sensitive_text
 from app.security.sql_guard import SqlRejected, validate_sql
+from app.semantics.catalog import CATALOG_VERSION, DEFINITIONS, public_catalog, resolved_semantics
+from app.semantics.models import MetricOptions
+from app.semantics.resolution import validate_plan_semantics
 from app.storage.models import VIEW_COLUMNS
-from app.tools.metric_catalog import CATALOG
 
 
 def utc_sql(value: datetime) -> str:
@@ -32,7 +35,8 @@ class QueryService:
     def schema(self):
         return {
             "views": VIEW_COLUMNS,
-            "metrics": CATALOG,
+            "metrics": public_catalog()["metrics"],
+            "metric_catalog_version": CATALOG_VERSION,
             "time_storage": "UTC",
             "dialect": "single SELECT, explicit columns, limited aggregate functions; no CTE/subquery",
         }
@@ -55,7 +59,18 @@ class QueryService:
                 timezone=timezone,
                 warnings=["请求超出只读网络指标查询范围"],
             )
-        snapshots = ("device_status", "interface_status", "link_status")
+        semantic_issues = validate_plan_semantics(plan, question)
+        if semantic_issues:
+            return SqlResult(
+                status="error",
+                timezone=timezone,
+                time_range_utc=window,
+                semantic_issues=semantic_issues,
+                missing_evidence=[issue.message for issue in semantic_issues],
+            )
+        snapshots = tuple(
+            m for m, definition in DEFINITIONS.items() if definition.kind == "snapshot"
+        )
         if any(metric not in snapshots for metric in plan.metrics) and not plan.start_utc:
             return SqlResult(
                 status="error", timezone=timezone, missing_evidence=["查询缺少时间范围"]
@@ -64,32 +79,60 @@ class QueryService:
         total_deadline = time.monotonic() + self.settings.sql_timeout_ms / 1000
         try:
             if plan.devices:
-                authorized = self.execute("SELECT hostname FROM v_device_status", {}, scope)
-                if not set(plan.devices).issubset({row["hostname"] for row in authorized.rows}):
-                    return SqlResult(
-                        status="forbidden",
-                        timezone=timezone,
-                        time_range_utc=window,
-                        warnings=["设备不在服务端授权范围内"],
+                # Authorization probes are bounded per requested device; a low result
+                # row cap must not hide an otherwise authorized device from this check.
+                for device in dict.fromkeys(plan.devices):
+                    authorized = self.execute(
+                        "SELECT hostname FROM v_device_status WHERE hostname=:requested_device LIMIT 1",
+                        {"requested_device": device},
+                        scope,
                     )
+                    if not authorized.rows:
+                        return SqlResult(
+                            status="forbidden",
+                            timezone=timezone,
+                            time_range_utc=window,
+                            warnings=["设备不在服务端授权范围内"],
+                        )
             for metric in dict.fromkeys(plan.metrics):
                 if time.monotonic() > total_deadline:
                     raise TimeoutError
                 sql, parameters = self.build_query(metric, plan)
                 result = self.execute(sql, parameters, scope)
                 meaningful = [row for row in result.rows if row.get("sample_count", 1) != 0]
+                source_rows = None
+                semantics = resolved_semantics(metric, plan.metric_options.get(metric), plan)
+                if semantics.execution == "interface_rollup":
+                    if result.truncated or any(
+                        row.get("interface_name") is None for row in meaningful
+                    ):
+                        return SqlResult(
+                            status="error",
+                            queries=evidence,
+                            timezone=timezone,
+                            time_range_utc=window,
+                            missing_evidence=[
+                                "接口明细被截断或存在未标注接口的采样，未计算不完整的接口等权均值；请缩小范围或补齐接口归属。"
+                            ],
+                        )
+                    source_rows = [{k: json_value(v) for k, v in row.items()} for row in meaningful]
+                    meaningful = self.interface_rollup(meaningful)
+                columns = list(meaningful[0]) if meaningful else result.columns
                 evidence.append(
                     QueryEvidence(
                         query_id=f"query_{uuid4().hex}",
+                        executed_at_utc=datetime.now(UTC).isoformat(),
                         metric=metric,
                         sql=validate_sql(sql, self.settings.sql_max_rows).sql(dialect="mysql"),
                         parameters=parameters,
-                        columns=result.columns,
+                        columns=columns,
                         rows=[{k: json_value(v) for k, v in row.items()} for row in meaningful],
                         row_count=len(meaningful),
                         truncated=result.truncated,
-                        unit=CATALOG[metric]["unit"],
-                        description=CATALOG[metric]["description"],
+                        unit=DEFINITIONS[metric].unit,
+                        description=self.describe(metric, semantics),
+                        semantics=semantics,
+                        source_rows=source_rows,
                         data_source=self.backend.source,
                         data_freshness_utc=max(
                             (
@@ -149,7 +192,39 @@ class QueryService:
         )
 
     @staticmethod
+    def describe(metric, semantics):
+        if DEFINITIONS[metric].kind != "sample":
+            return DEFINITIONS[metric].description
+        if semantics.aggregation == "interface_mean":
+            return f"{semantics.label}：先计算每个接口的采样均值，再按接口等权平均（按设备）"
+        grain = (
+            "按设备合并全部接口采样" if semantics.grouping == ["hostname"] else "按设备和接口分别"
+        )
+        return f"{semantics.label}：{grain}，对非空采样点等权求均值"
+
+    @staticmethod
+    def interface_rollup(rows):
+        """Never average partial interface groups; QueryEvidence retains SQL source rows."""
+        groups = defaultdict(list)
+        for row in rows:
+            groups[row["hostname"]].append(row)
+        return [
+            {
+                "hostname": host,
+                "average_value": sum(row["average_value"] for row in values) / len(values),
+                "min_value": min(row["min_value"] for row in values),
+                "max_value": max(row["max_value"] for row in values),
+                "sample_count": sum(row["sample_count"] for row in values),
+                "interface_count": len(values),
+                "latest_sample": max(row["latest_sample"] for row in values),
+            }
+            for host, values in sorted(groups.items())
+        ]
+
+    @staticmethod
     def build_query(metric, plan: QueryPlan):
+        definition = DEFINITIONS[metric]
+        option = plan.metric_options.get(metric, MetricOptions())
         parameters = {}
         where = []
         if plan.devices:
@@ -187,7 +262,7 @@ class QueryService:
             parameters.update(start=utc_sql(plan.start_utc), end=utc_sql(plan.end_utc))
             where.extend(["started_at>=:start", "started_at<:end"])
         else:
-            time_column = "occurred_at" if metric.startswith("alarm") else "sample_time"
+            time_column = definition.time_column
             parameters.update(start=utc_sql(plan.start_utc), end=utc_sql(plan.end_utc))
             where.extend([f"{time_column} >= :start", f"{time_column} < :end"])
             if metric.startswith("alarm"):
@@ -207,9 +282,14 @@ class QueryService:
                     where.append("interface_name = :interface")
                     parameters["interface"] = plan.interface
                 # metric identifier comes only from the Pydantic enum + catalog.
-                if metric not in CATALOG:
-                    raise SqlRejected("Unknown metric")
-                sql = f"SELECT hostname, interface_name, AVG({metric}) AS average_value, MIN({metric}) AS min_value, MAX({metric}) AS max_value, COUNT({metric}) AS sample_count, MAX(sample_time) AS latest_sample FROM v_interface_metrics"
+                value = definition.value_column
+                where.append(f"{value} IS NOT NULL")
+                grain = (
+                    "hostname"
+                    if option.grouping == "device" and option.aggregation == "sample_mean"
+                    else "hostname, interface_name"
+                )
+                sql = f"SELECT {grain}, AVG({value}) AS average_value, MIN({value}) AS min_value, MAX({value}) AS max_value, COUNT({value}) AS sample_count, MAX({time_column}) AS latest_sample FROM {definition.view}"
         if where:
             sql += " WHERE " + " AND ".join(where)
         if metric == "alarm_count":
@@ -222,7 +302,7 @@ class QueryService:
             "link_status",
             "incident_summaries",
         ):
-            sql += " GROUP BY hostname, interface_name ORDER BY hostname, interface_name"
+            sql += f" GROUP BY {grain} ORDER BY {grain}"
         elif metric == "incident_summaries":
             sql += " ORDER BY started_at, incident_id"
         elif metric == "link_status":

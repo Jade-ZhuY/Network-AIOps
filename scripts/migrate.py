@@ -12,12 +12,13 @@ async def migrate():
         settings.checkpoint_postgres_uri.get_secret_value()
     ) as saver:
         await saver.setup()
-        sql = (ROOT / "app" / "storage" / "session_schema.sql").read_text(encoding="utf-8")
         # Explicit migration script only; credentials never printed.
-        for statement in sql.split(";"):
-            if statement.strip():
-                await saver.conn.execute(statement)
-    print("PostgreSQL checkpoint, session, request and document schemas ready.")
+        for filename in ("session_schema.sql", "metric_governance_schema.sql"):
+            sql = (ROOT / "app" / "storage" / filename).read_text(encoding="utf-8")
+            for statement in sql.split(";"):
+                if statement.strip():
+                    await saver.conn.execute(statement)
+    print("PostgreSQL checkpoint, session, request, document and metric review schemas ready.")
 
 
 if __name__ == "__main__":

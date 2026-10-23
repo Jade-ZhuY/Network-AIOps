@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -7,6 +8,10 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Settings explicitly reads .env. Prevent SDKs (including PyMilvus) from silently
+# copying .env into process-wide environment variables and defeating _env_file=None.
+os.environ.setdefault("PYTHON_DOTENV_DISABLED", "1")
 
 
 class Settings(BaseSettings):
@@ -27,16 +32,51 @@ class Settings(BaseSettings):
     llm_reasoning_effort: Literal["low", "high", "max"] | None = None
     agent_timeout_seconds: float = Field(default=35, gt=0, le=180)
     agent_recursion_limit: int = Field(default=16, ge=4, le=32)
+    report_max_searches: int = Field(default=2, ge=0, le=3)
+    report_max_source_reads: int = Field(default=4, ge=0, le=8)
+    report_max_revisions: int = Field(default=1, ge=0, le=2)
+    report_max_sources: int = Field(default=8, ge=1, le=16)
+    report_context_tokens: int = Field(default=10000, ge=1000, le=24000)
+    report_timeout_seconds: float = Field(default=120, gt=0, le=180)
     mysql_readonly_uri: SecretStr = SecretStr("")
     sql_max_rows: int = Field(default=200, ge=1, le=1000)
     sql_timeout_ms: int = Field(default=3000, ge=1, le=10000)
+    text_to_sql_enabled: bool = True
     rag_top_k: int = Field(default=8, ge=1, le=50)
     rag_rerank_top_k: int = Field(default=4, ge=1, le=10)
+    rag_parent_chunk_size: int = Field(default=1200, ge=50, le=16000)
+    rag_parent_chunk_overlap: int = Field(default=200, ge=0)
+    rag_child_chunk_size: int = Field(default=300, ge=50, le=8000)
+    rag_child_chunk_overlap: int = Field(default=50, ge=0)
+    rag_token_encoding: str = "cl100k_base"
+    rag_parent_mysql_uri: SecretStr = SecretStr("")
     embedding_base_url: str = "http://127.0.0.1:8000/v1"
     embedding_model: str = ""
     embedding_api_key: SecretStr = SecretStr("EMPTY")
+    embedding_batch_size: int = Field(default=32, ge=1)
+    rag_vector_backend: Literal["memory", "milvus"] = "memory"
+    milvus_uri: str = "http://127.0.0.1:19530"
+    milvus_token: SecretStr = SecretStr("")
+    milvus_db_name: str = "default"
+    milvus_collection: str = Field(
+        default="network_aiops_chunks_hybrid", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=255
+    )
+    milvus_bm25_k1: float = Field(default=1.2, gt=0, le=3)
+    milvus_bm25_b: float = Field(default=0.75, ge=0, le=1)
+    milvus_dimension: int = Field(default=1024, ge=2, le=32768)
+    milvus_timeout_seconds: float = Field(default=15, gt=0, le=120)
     knowledge_dir: Path = ROOT / "data" / "knowledge"
     knowledge_upload_dir: Path = ROOT / "data" / "uploads"
+    mineru_api_url: str = "http://127.0.0.1:18000"
+    mineru_api_key: SecretStr = SecretStr("")
+    mineru_api_key_file: Path | None = ROOT / ".env.mineru-cloud"
+    mineru_expected_version: str = "4.0.12"
+    mineru_tier: Literal["flash", "basic", "standard", "advanced"] = "standard"
+    mineru_ocr_mode: Literal["auto", "txt", "ocr"] = "auto"
+    mineru_parse_timeout_seconds: float = Field(default=900, ge=10, le=3600)
+    mineru_poll_interval_seconds: float = Field(default=2, gt=0, le=30)
+    mineru_max_response_bytes: int = Field(default=64 * 1024 * 1024, ge=1024)
+    parsed_document_dir: Path = ROOT / "data" / "parsed"
     persistence_backend: Literal["none", "memory", "postgres"] = "none"
     checkpoint_postgres_uri: SecretStr = SecretStr("")
     api_auth_token: SecretStr = SecretStr("")
@@ -69,6 +109,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def required_live_configuration(self):
+        if not self.rag_child_chunk_size <= self.rag_parent_chunk_size:
+            raise ValueError("Child chunk size must not exceed parent chunk size")
+        if self.rag_parent_chunk_overlap >= self.rag_parent_chunk_size:
+            raise ValueError("Parent overlap must be smaller than parent chunk size")
+        if self.rag_child_chunk_overlap >= self.rag_child_chunk_size:
+            raise ValueError("Child overlap must be smaller than child chunk size")
         if self.llm_mode == "openai" and self.llm_model == "replace-with-served-model-id":
             raise ValueError("Set LLM_MODEL before enabling openai mode")
         if self.data_backend == "mysql" and not self.mysql_readonly_uri.get_secret_value():

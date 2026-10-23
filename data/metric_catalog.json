@@ -1,0 +1,117 @@
+{
+  "version": "1.0.0",
+  "metrics": [
+    {
+      "id": "packet_loss_pct", "label": "丢包率", "kind": "sample",
+      "aliases": ["丢包率", "丢包", "掉包", "packet loss", "loss"],
+      "view": "v_interface_metrics", "value_column": "packet_loss_pct", "unit": "%",
+      "description": "按设备和接口分组，对窗口内非空丢包率采样点等权求均值",
+      "row_grain": ["metric_id"], "time_column": "sample_time",
+      "time_policy": "UTC 采样时间落入 [start, end)，按用户时区解析边界",
+      "default_grouping": ["hostname", "interface_name"], "filters": ["hostname", "interface_name"],
+      "null_policy": "NULL 不参与均值、最小值、最大值和 sample_count；不补零、不插值",
+      "empty_policy": "无非空采样返回 no_data，不表示丢包率为零",
+      "unit_interpretation": "8.0 表示 8%，不是 0.08；这是采样百分比，不是丢包包数",
+      "limitations": ["百分比不可直接求和", "采样等权不是时长、流量或发包数加权", "包级总体丢包率需 SUM(lost_packets) / SUM(sent_packets) * 100；当前源没有这些计数器", "只统计窗口内有非空采样的接口，不表示接口采集完整"]
+    },
+    {
+      "id": "latency_ms", "label": "往返时延 RTT", "kind": "sample",
+      "aliases": ["时延", "延迟", "rtt", "latency"],
+      "view": "v_interface_metrics", "value_column": "latency_ms", "unit": "ms",
+      "description": "按设备和接口分组，对窗口内非空 RTT 采样点等权求均值",
+      "row_grain": ["metric_id"], "time_column": "sample_time",
+      "time_policy": "UTC 采样时间落入 [start, end)，按用户时区解析边界",
+      "default_grouping": ["hostname", "interface_name"], "filters": ["hostname", "interface_name"],
+      "null_policy": "NULL 不参与统计；不补零、不插值",
+      "empty_policy": "无非空采样返回 no_data，不表示时延为零",
+      "unit_interpretation": "毫秒，含义是往返 RTT，不是单向时延或抖动",
+      "limitations": ["采样等权不是时长或流量加权", "仅基于非空 RTT 记录，不含未成功返回的探测", "只统计窗口内有非空采样的接口，不表示接口采集完整"]
+    },
+    {
+      "id": "utilization_pct", "label": "接口利用率", "kind": "sample",
+      "aliases": ["接口利用率", "链路利用率", "利用率", "utilization"],
+      "view": "v_interface_metrics", "value_column": "utilization_pct", "unit": "%",
+      "description": "按设备和接口分组，对窗口内非空接口利用率采样点等权求均值",
+      "row_grain": ["metric_id"], "time_column": "sample_time",
+      "time_policy": "UTC 采样时间落入 [start, end)，按用户时区解析边界",
+      "default_grouping": ["hostname", "interface_name"], "filters": ["hostname", "interface_name"],
+      "null_policy": "NULL 不参与统计；不补零、不插值",
+      "empty_policy": "无非空采样返回 no_data，不表示利用率为零",
+      "unit_interpretation": "85.0 表示 85%；不是 bps 吞吐量、字节数或设备总带宽占比",
+      "limitations": ["当前采集源未提供收发方向与接口容量口径，保留源端 utilization_pct 定义", "跨接口等权均值不等于设备带宽利用率，后者需方向、容量与吞吐数据", "百分比不可直接求和", "只统计窗口内有非空采样的接口，不表示接口采集完整"]
+    },
+    {
+      "id": "alarm_count", "label": "告警事件数", "kind": "event_count",
+      "aliases": ["告警数", "告警数量", "alarm count"], "view": "v_alarm_events", "unit": "count",
+      "description": "窗口内告警事件记录数，按设备统计；不是告警类型数或故障数",
+      "row_grain": ["alarm_id"], "time_column": "occurred_at",
+      "time_policy": "告警发生时间 occurred_at 落入 UTC [start, end)",
+      "default_grouping": ["hostname"], "filters": ["hostname", "severity", "alarm_type"],
+      "null_policy": "COUNT(*) 统计事件记录，不根据描述去重",
+      "empty_policy": "没有事件记录返回 no_data；不推断没有故障或已经完整采集",
+      "unit_interpretation": "条告警事件，每条记录计一次；不按设备或告警类型去重",
+      "limitations": ["没有接口归属字段，接口过滤不适用于告警", "事件数不能当作故障数"]
+    },
+    {
+      "id": "alarm_events", "label": "告警事件明细", "kind": "events",
+      "aliases": ["告警", "alarm"], "view": "v_alarm_events", "unit": "events",
+      "description": "窗口内告警事件，按发生时间及事件 ID 排序",
+      "row_grain": ["alarm_id"], "time_column": "occurred_at",
+      "time_policy": "告警发生时间 occurred_at 落入 UTC [start, end)",
+      "default_grouping": [], "filters": ["hostname", "severity", "alarm_type"],
+      "null_policy": "保留原记录，不补造事件",
+      "empty_policy": "空明细不表示已完整采集或没有故障",
+      "unit_interpretation": "告警事件记录，不是故障工单",
+      "limitations": ["没有接口归属字段，接口过滤不适用于告警"]
+    },
+    {
+      "id": "incident_summaries", "label": "故障事件摘要", "kind": "incidents",
+      "aliases": ["故障记录", "事件记录", "工单", "历史故障", "incidents"],
+      "view": "v_incident_summaries", "unit": "incidents",
+      "description": "查询窗口内开始的故障事件摘要，不含根因标签和修复答案",
+      "row_grain": ["incident_id"], "time_column": "started_at",
+      "time_policy": "仅 started_at 落入 UTC [start, end)；不是与窗口重叠或窗口内仍未结束的全部事件",
+      "default_grouping": [], "filters": ["hostname"],
+      "null_policy": "ended_at 为 NULL 只表示源端没有结束时间，不据此断言仍在持续",
+      "empty_policy": "没有窗口内开始的事件不表示窗口内没有持续故障",
+      "unit_interpretation": "事件摘要记录，不等于告警数",
+      "limitations": ["只支持按开始时间查询，不支持持续中或时间重叠口径"]
+    },
+    {
+      "id": "device_status", "label": "设备最后已知状态", "kind": "snapshot",
+      "aliases": ["设备状态", "device status"], "view": "v_device_status", "unit": null,
+      "description": "设备最后已知状态快照，非实时探测",
+      "row_grain": ["device_id"], "time_column": null,
+      "time_policy": "没有采集时间，只提供最后已知快照；不应用历史时间窗",
+      "default_grouping": [], "filters": ["hostname"],
+      "null_policy": "保留源端状态，不将缺失状态当作正常",
+      "empty_policy": "没有快照不表示设备不存在或处于正常状态",
+      "unit_interpretation": "源端状态枚举，不是可用率或故障持续时间",
+      "limitations": ["没有采集时间，不代表实时或历史状态"]
+    },
+    {
+      "id": "interface_status", "label": "接口最后已知状态", "kind": "snapshot",
+      "aliases": ["接口状态", "interface status"], "view": "v_interface_status", "unit": null,
+      "description": "接口最后已知管理与运行状态快照",
+      "row_grain": ["interface_id"], "time_column": null,
+      "time_policy": "没有采集时间，只提供最后已知快照；不应用历史时间窗",
+      "default_grouping": [], "filters": ["hostname", "interface_name"],
+      "null_policy": "管理状态和运行状态分别保留，不相互替代",
+      "empty_policy": "没有快照不表示接口正常或不存在",
+      "unit_interpretation": "admin_status 为管理状态，oper_status 为运行状态",
+      "limitations": ["没有采集时间，不代表实时或历史状态"]
+    },
+    {
+      "id": "link_status", "label": "链路最后已知状态", "kind": "snapshot",
+      "aliases": ["链路状态", "链路拓扑", "link status", "links"], "view": "v_link_status", "unit": null,
+      "description": "两端都在授权范围内的链路最后已知状态快照",
+      "row_grain": ["link_id"], "time_column": null,
+      "time_policy": "没有采集时间，只提供最后已知快照；不应用历史时间窗",
+      "default_grouping": [], "filters": ["hostname", "interface_name"],
+      "null_policy": "保留源端链路状态，不将缺失状态当作正常",
+      "empty_policy": "空结果可能是链路对端不在授权范围，不表示无链路",
+      "unit_interpretation": "源端链路状态，接口过滤匹配任意一端",
+      "limitations": ["链路两端均需授权", "没有采集时间，不代表实时或历史状态"]
+    }
+  ]
+}

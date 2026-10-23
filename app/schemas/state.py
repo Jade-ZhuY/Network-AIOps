@@ -14,3 +14,7 @@ class NetworkState(MessagesState):
     sql_result: NotRequired[dict | None]
     final_report: NotRequired[dict | None]
     report_calls: NotRequired[int]
+    generated_sql_result: NotRequired[dict | None]
+    reviewed_metric_result: NotRequired[dict | None]
+    previous_sql_context: NotRequired[dict | None]
+    previous_sql_question: NotRequired[str]

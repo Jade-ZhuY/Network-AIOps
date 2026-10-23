@@ -26,7 +26,7 @@ ALLOWED_FUNCTIONS = (
 )
 
 
-def validate_sql(sql: str, max_rows: int = 200) -> exp.Select:
+def validate_sql(sql: str, max_rows: int = 200, *, allow_time_buckets: bool = False) -> exp.Select:
     if len(sql) > 12000:
         raise SqlRejected("SQL exceeds size budget")
     if re.search(r"/\*|--|#", sql):
@@ -80,12 +80,20 @@ def validate_sql(sql: str, max_rows: int = 200) -> exp.Select:
                 or column.name not in VIEW_COLUMNS[aliases[column.table]]
             ):
                 raise SqlRejected("Unauthorized column")
-        elif not (column.name in output_aliases and column.find_ancestor(exp.Order, exp.Group)):
+        elif not (
+            column.name in output_aliases
+            and column.find_ancestor(
+                exp.Order, exp.Group, *([exp.Having] if allow_time_buckets else [])
+            )
+        ):
             owners = [view for view in aliases.values() if column.name in VIEW_COLUMNS[view]]
             if len(owners) != 1:
                 raise SqlRejected("Unknown or ambiguous column")
     for function in ast.find_all(exp.Func):
-        if not isinstance(function, ALLOWED_FUNCTIONS):
+        temporal = allow_time_buckets and isinstance(
+            function, (exp.TimeToStr, exp.TsOrDsToTimestamp, exp.TsOrDsToDate)
+        )
+        if not isinstance(function, ALLOWED_FUNCTIONS) and not temporal:
             raise SqlRejected("Function outside allowlist")
     for placeholder in ast.find_all(exp.Placeholder):
         if str(placeholder.this).startswith("acl_"):
@@ -99,9 +107,11 @@ def validate_sql(sql: str, max_rows: int = 200) -> exp.Select:
             or int(expression.this) < 1
         ):
             raise SqlRejected("LIMIT must be a positive integer")
+        ast.meta["requested_limit"] = int(expression.this)
         limit.set("expression", exp.Literal.number(min(int(expression.this), max_rows + 1)))
     else:
         ast = ast.limit(max_rows + 1)
+        ast.meta["requested_limit"] = None
     return ast
 
 
