@@ -2,7 +2,9 @@
 
 ## React + Java 业务入口
 
-已新增独立 Spring Boot 业务服务：咨询单管理、状态流转、处理记录和审计。默认使用本地 H2 文件库，不依赖 PostgreSQL；Python Agent 接入默认关闭，待服务就绪后显式启用。
+已新增独立 Spring Boot 业务服务：咨询单管理、状态流转、处理记录和审计。默认使用本机 MySQL（network_aiops_demo 库，MyBatis 访问），不依赖 PostgreSQL；Python Agent 接入默认关闭，待服务就绪后显式启用。
+
+Java 后端现为 **Maven 父 POM + 五个子模块的模块化单体**：`aiops-common-core`、`aiops-common-spring`、`aiops-agent-client`、`aiops-business`、`aiops-startup`。只运行 startup 一个进程；接口、RestClient 协议和原业务库保持兼容。依赖方向与构建方式见 [多模块架构说明](docs/java-multimodule-architecture.md)。
 
 ```powershell
 npm --prefix frontend ci

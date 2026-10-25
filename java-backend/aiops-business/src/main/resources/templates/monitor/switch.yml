@@ -1,0 +1,12 @@
+# 网络交换机监控模板。metrics.id 与 data/metric_catalog.json 的指标口径对齐，
+# SQL 口径由 Python 指标目录负责，模板只承载展示元数据与默认阈值。
+type: switch
+name: 交换机
+category: network
+params:
+  - { name: hostname,   label: 设备主机名, required: true }
+  - { name: community,  label: SNMP 团体字, required: false }
+metrics:
+  - { id: packet_loss_pct,  unit: "%",   warning: 5,  critical: 20, queryable: true }
+  - { id: latency_ms,       unit: "ms",  warning: 50, critical: 200, queryable: true }
+  - { id: utilization_pct,  unit: "%",   warning: 75, critical: 90, queryable: true }

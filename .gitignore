@@ -23,6 +23,7 @@ frontend/coverage/
 frontend/.vite/
 *.tsbuildinfo
 java-backend/target/
+java-backend/**/target/
 java-backend/data/
 java-backend/.local/
 *.log

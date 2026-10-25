@@ -15,3 +15,6 @@ frontend/coverage
 frontend/.env
 frontend/.env.*
 app/web/dist
+java-backend/**/target
+java-backend/data
+java-backend/.local

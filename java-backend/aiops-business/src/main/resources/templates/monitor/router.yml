@@ -1,0 +1,11 @@
+# 路由器监控模板。
+type: router
+name: 路由器
+category: network
+params:
+  - { name: hostname,  label: 设备主机名, required: true }
+  - { name: community, label: SNMP 团体字, required: false }
+metrics:
+  - { id: packet_loss_pct,  unit: "%",  warning: 3,  critical: 15, queryable: true }
+  - { id: latency_ms,       unit: "ms", warning: 40, critical: 150, queryable: true }
+  - { id: utilization_pct,  unit: "%",  warning: 70, critical: 88, queryable: true }

@@ -19,10 +19,35 @@ function javaFixture(
   const agentEnabled = configuration.agentEnabled ?? false;
   let ticket: Ticket | null = null;
   const analyses: TicketAnalysis[] = [];
-  let completeAnalysis!: () => void;
-  const pendingAnalysis = new Promise<void>((resolve) => {
-    completeAnalysis = resolve;
-  });
+  // The backend answers 202 immediately; completion may land before or after the POST
+  // resolves, so the fixture applies a requested completion whenever both halves exist.
+  let completionRequested = false;
+  const applyCompletion = () => {
+    if (!completionRequested || !ticket || analyses.length === 0) return;
+    if (analyses[0].status !== "RUNNING") return;
+    const reportStatus = configuration.reportStatus ?? "completed";
+    analyses[0] = {
+      ...analyses[0],
+      status: "SUCCEEDED",
+      request_id: result.request_id,
+      response: {
+        ...result,
+        status: reportStatus,
+        report: { ...result.report, status: reportStatus },
+      },
+      completed_at: "2026-10-22T05:01:00Z",
+    };
+    ticket = {
+      ...ticket,
+      analysis_status: "SUCCEEDED",
+      agent_session_id: result.session_id,
+      version: ticket.version + 1,
+    };
+  };
+  const completeAnalysis = () => {
+    completionRequested = true;
+    applyCompletion();
+  };
   const calls: {
     path: string;
     method: string;
@@ -49,14 +74,14 @@ function javaFixture(
         backend: "java",
         agent_enabled: agentEnabled,
         capabilities: ["tickets"],
-        business_storage: "h2-file",
+        business_storage: "mysql",
       });
     if (path === "/health")
       return response({
         status: "ok",
         backend: "java",
         data_kind: "business",
-        database: "h2",
+        database: "mysql",
         checkpoint: "java-business",
         agent_status: "disabled",
       });
@@ -70,7 +95,7 @@ function javaFixture(
           CLOSED: 0,
         },
         recent: ticket ? [ticket] : [],
-        storage: "h2-file",
+        storage: "mysql",
         agent_enabled: agentEnabled,
       });
     if (path === "/sessions") return response({ sessions: [] });
@@ -157,33 +182,19 @@ function javaFixture(
       if (method === "GET") return response({ analyses });
       if (!agentEnabled || !ticket)
         return response({ detail: "Agent 服务尚未启用。" }, 503);
+      analyses.unshift({
+        id: "analysis-test",
+        status: "RUNNING",
+        started_at: "2026-10-22T05:00:00Z",
+        response: null,
+      });
       ticket = {
         ...ticket,
         analysis_status: "RUNNING",
         version: ticket.version + 1,
       };
-      await pendingAnalysis;
-      const reportStatus = configuration.reportStatus ?? "completed";
-      const analysis: TicketAnalysis = {
-        id: "analysis-test",
-        status: "SUCCEEDED",
-        request_id: result.request_id,
-        response: {
-          ...result,
-          status: reportStatus,
-          report: { ...result.report, status: reportStatus },
-        },
-        started_at: "2026-10-22T05:00:00Z",
-        completed_at: "2026-10-22T05:01:00Z",
-      };
-      analyses.unshift(analysis);
-      ticket = {
-        ...ticket,
-        analysis_status: "SUCCEEDED",
-        agent_session_id: result.session_id,
-        version: ticket.version + 1,
-      };
-      return response(analysis);
+      applyCompletion();
+      return response(analyses[0], 202);
     }
     return response({ detail: "测试接口未定义。" }, 404);
   };
@@ -319,13 +330,17 @@ test("enabled Java analysis waits for complete JSON, prevents duplicate clicks, 
     ),
   ).toHaveLength(1);
   fixture.completeAnalysis();
-  expect(await screen.findByText(result.report.summary)).toBeInTheDocument();
+  expect(
+    await screen.findByText(result.report.summary, {}, { timeout: 8000 }),
+  ).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "打开完整调查与证据" }),
   ).toBeEnabled();
   expect(screen.getByText(/报告状态：completed/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: /^刷新$/ }));
-  expect(await screen.findByText(result.report.summary)).toBeInTheDocument();
+  expect(
+    await screen.findByText(result.report.summary),
+  ).toBeInTheDocument();
   expect(fixture.calls.some((call) => call.path === "/chat")).toBe(false);
 });
 
@@ -337,7 +352,9 @@ test("partial Agent reports retain their status and do not resolve the consultat
   await createTicket();
   await userEvent.click(screen.getByRole("button", { name: "AI 分析" }));
   fixture.completeAnalysis();
-  expect(await screen.findByText(/报告状态：partial/)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/报告状态：partial/, {}, { timeout: 8000 }),
+  ).toBeInTheDocument();
   expect(screen.getAllByText("待处理").length).toBeGreaterThan(0);
   expect(fixture.calls.some((call) => call.method === "PATCH")).toBe(false);
   expect(screen.getByRole("button", { name: "AI 分析" })).toBeEnabled();

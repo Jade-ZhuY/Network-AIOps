@@ -492,8 +492,13 @@ function TicketDetail({
         method: "POST",
         body: { version: ticket.version },
       });
+      const outcome = await waitForAnalysis();
       await refresh();
-      notify("Agent 调用已完成，请核对返回报告。");
+      if (outcome === "FAILED")
+        notify("Agent 调用未取得有效结果，请查看分析记录。", true);
+      else if (outcome === null)
+        notify("分析仍在进行，稍后刷新即可查看结果。");
+      else notify("Agent 调用已完成，请核对返回报告。");
     } catch (err) {
       setError(errorText(err));
       notify(errorText(err), true);
@@ -501,6 +506,17 @@ function TicketDetail({
     } finally {
       setBusy(false);
     }
+  }
+  // Java answers 202 immediately and executes on its own bounded pool; poll the stored
+  // ticket state instead of holding the POST request open for the whole analysis.
+  async function waitForAnalysis(): Promise<string | null> {
+    const deadline = Date.now() + 200_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const detail = await api.request<Ticket>(`/tickets/${ticket.id}`);
+      if (detail.analysis_status !== "RUNNING") return detail.analysis_status;
+    }
+    return null;
   }
   return (
     <>

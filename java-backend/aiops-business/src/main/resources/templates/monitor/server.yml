@@ -1,0 +1,9 @@
+# 服务器监控模板。演示数据集的接口采样同样覆盖服务器主机名。
+type: server
+name: 服务器
+category: compute
+params:
+  - { name: hostname, label: 设备主机名, required: true }
+metrics:
+  - { id: latency_ms,      unit: "ms", warning: 30, critical: 120, queryable: true }
+  - { id: utilization_pct, unit: "%",  warning: 80, critical: 92, queryable: true }

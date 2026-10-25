@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $backend = Join-Path $root 'java-backend'
 $local = Join-Path $backend '.local'
-$jar = Join-Path $backend 'target\aiops-business-0.1.0.jar'
+$jar = Join-Path $backend 'aiops-startup\target\aiops-startup-0.1.0.jar'
 New-Item -ItemType Directory -Path $local -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $backend 'data') -Force | Out-Null
 if (Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue) {

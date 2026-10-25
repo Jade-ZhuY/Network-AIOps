@@ -2,6 +2,8 @@
 
 实现日期：2026-10-22，Asia/Shanghai。
 
+> 2026-10-23 架构更新：Java 已改为父 POM + 五个 Maven 子模块，只有 `aiops-startup` 生成可执行 JAR；其他模块为普通库。HTTP 接口、原 H2 数据和 RestClient 调用保持兼容。当前目录、模块依赖及构建说明见 [Java 多模块架构](java-multimodule-architecture.md)。本文后面的旧验收数量属于 2026-10-22 的历史记录。
+
 > 当日更新：现已使用 RestClient 启用 Java → Python Agent，并完成真实模型的 SQL、RAG、综合诊断验收。本文早期“默认禁用”的描述保留为默认配置说明，不代表当前运行进程仍未接入。当前状态、重启命令和证据见 [RestClient 接入验收记录](java-agent-restclient-integration-2026-10-22.md)。
 
 ## 1. 本轮实际交付
@@ -11,7 +13,7 @@ React + TypeScript
         ↓ 同源 /api/v1
 Spring Boot Java 业务服务（127.0.0.1:18081）
         ├─ 当前身份、咨询单 CRUD、状态流转、处理记录、审计
-        ├─ H2 文件业务库（无需 PostgreSQL）
+        ├─ MySQL 业务库（本机 network_aiops_demo，MyBatis 访问）
         └─ AgentClient / 明确端点白名单
                   ↓ 显式启用后才调用
              原 Python FastAPI 多 Agent
@@ -21,31 +23,26 @@ Spring Boot Java 业务服务（127.0.0.1:18081）
 
 ## 2. 技术与目录
 
-- Spring Boot **3.5.16**、Spring Security、Spring JDBC、Jakarta Validation、Flyway、H2。
+- Spring Boot **3.5.16**、Spring Security、MyBatis（mybatis-spring-boot-starter 3.0.5）、Jakarta Validation、Flyway、MySQL 驱动；测试用内存 H2。
 - Java 编译目标 21；本机实际以 JDK **25.0.1** 和 Maven **3.9.4** 构建及运行。Spring Boot 3.5 官方兼容 Java 25：<https://docs.spring.io/spring-boot/3.5/system-requirements.html>。
 - Maven `verify` 包含测试和 Spotless 格式检查；固定 Google Java Format 1.28.0，当前工具链已验证。较新的 1.37.0 与本次选用的 Spotless 桥接出现反射异常，未保留该组合。
 - 前端继续使用 React + TS + Vite，共用原布局、令牌登录和 API 客户端。
 
 ```text
 java-backend/
-  pom.xml
+  pom.xml                 aiops-parent：聚合、版本与构建管理
   .mvn/settings.xml       项目级 HTTPS 镜像，不修改系统 Maven 设置
   .mvn/jvm.config         仅构建工具所需的编译器模块导出
-  src/main/java/com/networkaiops/backend/
-    common/              业务异常、统一错误、请求追踪 ID
-    config/              安全、配置验证、JSON 边界、静态资源托管
-    security/            Bearer 认证、服务端身份与授权范围
-    ticket/              Controller / Service / Repository / DTO、Agent 分析流程
-    audit/               业务审计存储
-    agent/               独立 AgentClient 和受限端点转发
-    workspace/           身份、能力、总览、首页
-  src/main/resources/db/migration/V1__business_schema.sql
-  src/test/java/          真实 Spring 上下文、H2 和受控 HTTP 上游测试
-  data/                   本地业务数据库（Git 忽略）
+  aiops-common-core/      纯 Java：身份、异常、错误契约、请求上下文
+  aiops-common-spring/    Spring Security、JSON、过滤器与统一异常处理
+  aiops-agent-client/     RestClient 和 Agent 配置；不含 Servlet Controller
+  aiops-business/         Service、Repository、业务 DTO、审计及 Flyway SQL
+  aiops-startup/          唯一启动入口、Controller、应用配置、静态资源
+  data/                   历史 H2 文件遗留（已停用，Git 忽略）
   .local/                 进程信息、日志、私有令牌文件（Git 忽略）
 ```
 
-没有为简单 CRUD 强行引入 Redis、RabbitMQ、Spring Cloud、MyBatis 与 JPA 双 ORM 或另一套 Agent 编排。
+没有为简单 CRUD 强行引入 Redis、RabbitMQ、Spring Cloud 或 JPA 双 ORM；MyBatis 于 2026-10-25 应需求引入，用于接管 MySQL 数据层。
 
 ## 3. 直接启动
 
@@ -110,15 +107,18 @@ Vite 默认代理 Java **18081**，开发入口 <http://127.0.0.1:5173/>。若�
 
 ### 存储
 
-默认数据库文件位于：
+业务数据自 2026-10-25 起存放在本机 MySQL（8.0.34）的 `network_aiops_demo` 库：`tickets`、`ticket_analyses`、`audit_events` 三张表由 Flyway 管理（`baseline-on-migrate` 基线 0 + V1，脚本按数据库厂商放在 `db/migration/mysql`，测试走内存 H2 的 `db/migration/h2`）。SQL 全部由 MyBatis Mapper 执行；时间戳统一由应用按 UTC 写入 DATETIME(6)，不依赖数据库会话时区。
 
-```text
-D:\Network AIOps\java-backend\data\aiops-business.mv.db
-```
+连接默认 `root@127.0.0.1:3306`，可用 `AIOPS_JAVA_DATABASE_URL`、`AIOPS_JAVA_DATABASE_USERNAME`、`AIOPS_JAVA_DATABASE_PASSWORD` 覆盖。服务只监听回环地址。备份使用 mysqldump。
 
-Flyway 自动执行明确版本迁移，不使用 ORM 的自动 update。H2 控制台关闭，服务只监听回环地址。
+旧 H2 文件仍保留在 `java-backend/data/aiops-business.mv.db` 供回滚查阅，运行时不再读写；切换时未搬运历史数据，MySQL 表从空库开始。Python Agent 所需的 PostgreSQL 与此库是独立工作。
 
-这是本地开发持久化方案，不是生产集群数据库。需要备份时先停止 Java，再复制 data 目录；不要把运行中的文件复制当作一致性备份。未来将 Java 业务库迁移 PostgreSQL 时，还需添加相应 JDBC/Flyway 支持、迁移和实际验收，不是仅修改 URL。Python Agent 所需的 PostgreSQL 与此库是独立工作。
+### 监控与指标（2026-10-25 新增）
+
+- 监控对象（`monitor` 表，Flyway V2）：名称 2–100 字符、类型必须是已注册模板、hostname 至多 64 字符、标签至多 10 个且单个 32 字符、描述至多 500 字符；软删除与乐观版本规则与咨询单一致；审计事件写入 `audit_events.resource_id`。
+- 监控类型模板：`aiops-business/src/main/resources/templates/monitor/*.yml`（switch/router/server），启动时由 SnakeYAML 解析进 `TemplateRegistry`，字段缺失、阈值倒挂、指标重复会直接启动失败。模板只定义展示元数据与默认阈值；指标 SQL 口径仍以 Python 侧 `data/metric_catalog.json` 为单一来源。
+- 指标定义接口把各模板引用的指标聚合，`device_types` 列出引用它的设备类型。
+- 时序查询：按监控对象的 hostname 只读查询共享演示库 `network_metrics`（生产表由 `scripts/init_mysql.sql` 创建，Java 不写、不复制时序数据）；窗口至多 31 天、单次至多 2000 点（`truncated` 标记截断）；NULL 采样不参与，空窗口返回 `no_data=true` 而非零值；`interface` 参数可按接口过滤。
 
 ## 6. 主要接口
 
@@ -126,7 +126,8 @@ API 保留 `/api/v1` 和 snake_case JSON。错误直接使用真实 HTTP 状态�
 
 | 方法 | 路径 | 内容 |
 | --- | --- | --- |
-| GET | `/health`、`/api/v1/health` | Java 业务健康；不冒充 Agent 可用性 |
+| GET | `/health`、`/api/v1/health` | Java 业务健康；`agent_status` 为最近一次真实调用的结果（disabled / configured_not_probed / online / error） |
+| GET | `/api/v1/agent/status` | Agent 运行状态注册表：最近调用结果、耗时、分析并发与队列深度 |
 | GET | `/api/v1/me` | 当前服务端身份 |
 | GET | `/api/v1/workspace` | Java 能力和 Agent 启用状态 |
 | GET | `/api/v1/business/overview` | 当前身份的统计与最近咨询单 |
@@ -137,8 +138,13 @@ API 保留 `/api/v1` 和 snake_case JSON。错误直接使用真实 HTTP 状态�
 | PATCH | `/api/v1/tickets/{id}/status` | 流转状态，含 version/status/note |
 | DELETE | `/api/v1/tickets/{id}?version=2` | 软删除，204 |
 | GET | `/api/v1/tickets/{id}/events` | 处理历史 |
-| GET/POST | `/api/v1/tickets/{id}/analyses` | 分析历史 / 发起 Agent 分析 |
+| GET/POST | `/api/v1/tickets/{id}/analyses` | 分析历史 / 发起 Agent 分析。POST 为异步：202 返回 RUNNING 记录，执行结果通过 GET 轮询获得 |
 | GET | `/api/v1/admin/audit?limit=50` | 管理员当前身份范围的业务审计 |
+| GET | `/api/v1/monitor-templates` | 监控类型模板清单；`/{type}` 返回指标与默认阈值详情 |
+| GET/POST | `/api/v1/monitors?q=&type=&status=&offset=0&limit=20` | 监控对象分页查询 / 新建（type 必须是已注册模板） |
+| GET/PUT/DELETE | `/api/v1/monitors/{id}` | 详情 / 修改 / 软删除，均含乐观 version |
+| GET | `/api/v1/metric-definitions` | 跨模板聚合的指标定义 |
+| GET | `/api/v1/monitors/{id}/metrics/{metricId}/series?start=&end=&interface=` | 指标时序查询：start/end 为 ISO-8601，窗口 ≤31 天；返回 points/no_data/truncated |
 
 请求示例（新增）：
 
@@ -152,7 +158,7 @@ API 保留 `/api/v1` 和 snake_case JSON。错误直接使用真实 HTTP 状态�
 {"detail":"记录已被修改，请刷新后重试。","code":"version_conflict","request_id":"java_...","timestamp":"2026-10-22T00:00:00Z"}
 ```
 
-401 为本地令牌认证失败，403 为权限限制，404 隐藏不存在或非本人记录，409 为版本/流转/并发冲突，422 为参数校验失败，503 为存储/Agent 未就绪，502 为上游异常或不兼容响应。请求 ID 由服务器生成，同时放在 `X-Request-ID`。
+401 为本地令牌认证失败，403 为权限限制，404 隐藏不存在或非本人记录，409 为版本/流转/并发冲突，422 为参数校验失败，429 为分析并发与队列已满，503 为存储/Agent 未就绪，502 为上游异常或不兼容响应。请求 ID 由服务器生成，同时放在 `X-Request-ID`。
 
 ## 7. 后续启用真实 Agent
 
@@ -166,14 +172,16 @@ Set-Location 'D:\Network AIOps'
 
 Java 与 Python 必须对同一个令牌返回相同的 user_id、role、tenant_id 和授权 scope。独立 Java 本地令牌不会自动成为 Python 令牌。Java 不使用共用的上游管理员密钥替代当前用户。
 
-实际分析：保留/创建 Agent 会话 → 提交咨询单描述原文到 `/api/v1/chat` → 保存上游原始结构化报告和请求 ID。网络调用放在数据库事务之外；进入与结束状态各自短事务保存。
+实际分析（异步任务，借鉴 HertzBeat 采集任务的双通道设计）：请求线程只做校验、身份验证、落一条 RUNNING 记录并入队，立即返回 202；真正的会话创建与 `/api/v1/chat` 调用在独立的有界工作池（`workspace.analysis.max-concurrent` / `queue-capacity`）执行，完成状态各自短事务保存。网络调用放在数据库事务之外。
 
 - 上游未启用：503 `agent_disabled`，不创建假分析记录。
 - 网络不可达：明确失败并保留咨询单；不自动重试 POST。
 - 超时后上游可能仍在处理，须核对 Agent 会话后再重试，不宣称分布式 exactly-once。
 - 身份不一致、JSON 非法、响应超限均停止处理；原始上游异常正文不返回前端。
-- 仍是同步完整返回，不把 `RestClient` 当作 SSE。
-- Agent 转发使用显式路径白名单，不是任意 URL 的开放代理。知识资料变更在 Java 和 Python 两端均校验管理员权限。
+- POST 返回 202 与 RUNNING 记录，不把 `RestClient` 当作 SSE；前端轮询 GET 直到离开 RUNNING。
+- 分析并发与队列容量有上限，满载时 POST 返回 429 `analysis_queue_full`，不无限排队。
+- 进程重启时仍在执行的分析由启动恢复统一标记为 FAILED（`server_restarted`），不残留 RUNNING。
+- Agent 转发使用显式路径白名单，不是任意 URL 的开放代理。知识资料变更在 Java 和 Python 两端均校验管理员权限；上传、删除、重建索引同时写入 Java 业务审计（`KNOWLEDGE_DOCUMENT_UPLOADED / DELETED / REINDEXED`，outcome 为 completed/failed），保证影响 AI 检索内容的变更可回溯。
 - 模型返回 partial 或 needs_clarification 不等于故障已解决；界面只标注“已返回报告”，人工决定业务状态。
 
 ## 8. 代码来源与规范
