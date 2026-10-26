@@ -496,8 +496,7 @@ function TicketDetail({
       await refresh();
       if (outcome === "FAILED")
         notify("Agent 调用未取得有效结果，请查看分析记录。", true);
-      else if (outcome === null)
-        notify("分析仍在进行，稍后刷新即可查看结果。");
+      else if (outcome === null) notify("分析仍在进行，稍后刷新即可查看结果。");
       else notify("Agent 调用已完成，请核对返回报告。");
     } catch (err) {
       setError(errorText(err));

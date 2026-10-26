@@ -54,11 +54,27 @@ function javaFixture(
     body: Record<string, unknown> | null;
   }[] = [];
   const events: BusinessEvent[] = [];
-  const response = (body: unknown, status = 200) =>
-    new Response(status === 204 ? null : JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+  // 与 Java 后端 Result 信封保持一致：成功 {code:1,msg:"success",data}，失败 {code:0,msg,data:null}。
+  const response = (body: unknown, status = 200) => {
+    const detail =
+      body && typeof body === "object" && "detail" in body
+        ? (body as { detail: unknown }).detail
+        : undefined;
+    return new Response(
+      status === 204
+        ? null
+        : JSON.stringify(
+            status < 400
+              ? { code: 1, msg: "success", data: body }
+              : {
+                  code: 0,
+                  msg: typeof detail === "string" ? detail : undefined,
+                  data: null,
+                },
+          ),
+      { status, headers: { "Content-Type": "application/json" } },
+    );
+  };
   const fetcher = async (input: RequestInfo | URL, options?: RequestInit) => {
     const path = String(input).replace("/api/v1", "");
     const pathname = path.split("?")[0];
@@ -338,9 +354,7 @@ test("enabled Java analysis waits for complete JSON, prevents duplicate clicks, 
   ).toBeEnabled();
   expect(screen.getByText(/报告状态：completed/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: /^刷新$/ }));
-  expect(
-    await screen.findByText(result.report.summary),
-  ).toBeInTheDocument();
+  expect(await screen.findByText(result.report.summary)).toBeInTheDocument();
   expect(fixture.calls.some((call) => call.path === "/chat")).toBe(false);
 });
 

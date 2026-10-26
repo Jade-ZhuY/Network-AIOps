@@ -2,7 +2,6 @@ package com.networkaiops.backend.common.context;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.networkaiops.backend.common.exception.ErrorResponse;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 
@@ -47,16 +46,5 @@ class RequestContextTest {
     assertThrows(IllegalArgumentException.class, () -> RequestContext.open(" "));
     assertThrows(IllegalArgumentException.class, () -> RequestContext.open("x".repeat(129)));
     assertEquals("internal", RequestContext.currentId());
-  }
-
-  @Test
-  void errorResponseUsesFrameworkFreeContext() {
-    try (var ignored = RequestContext.open("java_error")) {
-      var error = ErrorResponse.of("message", "reason");
-      assertEquals("java_error", error.requestId());
-      assertEquals("message", error.detail());
-      assertEquals("reason", error.code());
-      assertNotNull(error.timestamp());
-    }
   }
 }

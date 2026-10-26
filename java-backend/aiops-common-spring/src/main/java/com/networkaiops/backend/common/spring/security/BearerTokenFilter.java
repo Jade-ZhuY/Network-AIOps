@@ -1,9 +1,9 @@
 package com.networkaiops.backend.common.spring.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networkaiops.backend.common.exception.ErrorResponse;
 import com.networkaiops.backend.common.identity.WorkspacePrincipal;
 import com.networkaiops.backend.common.spring.config.AuthProperties;
+import com.networkaiops.backend.common.web.Result;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -73,7 +73,6 @@ public class BearerTokenFilter extends OncePerRequestFilter {
     response.setStatus(401);
     response.setHeader("WWW-Authenticate", "Bearer");
     response.setContentType("application/json;charset=UTF-8");
-    mapper.writeValue(
-        response.getOutputStream(), ErrorResponse.of("访问令牌无效，请重新登录。", "authentication_required"));
+    mapper.writeValue(response.getOutputStream(), Result.error("访问令牌无效，请重新登录。"));
   }
 }

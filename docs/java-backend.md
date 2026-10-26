@@ -124,6 +124,18 @@ Vite 默认代理 Java **18081**，开发入口 <http://127.0.0.1:5173/>。若�
 
 API 保留 `/api/v1` 和 snake_case JSON。错误直接使用真实 HTTP 状态，不以 HTTP 200 包装失败。
 
+### 统一响应结果
+
+Java 接口统一使用普通 `Result` 类（Lombok `@Data`，非泛型）：`Integer code`、`String msg`、`Object data`。成功调用 `Result.success()` / `Result.success(data)`，返回 `code=1`、`msg="success"`；失败调用 `Result.error(msg)`，返回 `code=0`、错误提示和 `data=null`。
+
+```json
+{"code":1,"msg":"success","data":{"id":"ticket-example"}}
+```
+
+`code` 是响应体的成功/失败标志，不是 HTTP 状态码：新建仍返回 HTTP 201、异步分析仍为 202、错误仍为 401/403/404/409/422/429/502/503 等。HTTP 204 删除成功保持空响应。错误响应体不再带 `reason/request_id/timestamp`，请求编号继续通过 `X-Request-ID` 响应头和服务端日志追踪。
+
+Java 的 Agent 转发接口也在最外层包装此结果；Python FastAPI 内部协议保持原样。前端统一 API 客户端读取 `msg`、以 `code===1` 判定成功并提取 `data`，同时兼容直连 Python 的原始响应。验收脚本同样兼容这两种入口。
+
 | 方法 | 路径 | 内容 |
 | --- | --- | --- |
 | GET | `/health`、`/api/v1/health` | Java 业务健康；`agent_status` 为最近一次真实调用的结果（disabled / configured_not_probed / online / error） |
@@ -155,7 +167,7 @@ API 保留 `/api/v1` 和 snake_case JSON。错误直接使用真实 HTTP 状态�
 错误示例：
 
 ```json
-{"detail":"记录已被修改，请刷新后重试。","code":"version_conflict","request_id":"java_...","timestamp":"2026-10-22T00:00:00Z"}
+{"code":0,"msg":"记录已被修改，请刷新后重试。","data":null}
 ```
 
 401 为本地令牌认证失败，403 为权限限制，404 隐藏不存在或非本人记录，409 为版本/流转/并发冲突，422 为参数校验失败，429 为分析并发与队列已满，503 为存储/Agent 未就绪，502 为上游异常或不兼容响应。请求 ID 由服务器生成，同时放在 `X-Request-ID`。
@@ -193,6 +205,16 @@ Java 与 Python 必须对同一个令牌返回相同的 user_id、role、tenant_
 输入 DTO 与响应 DTO 分离；数据归属来自服务端；未知 JSON 字段被拒绝；不信任请求提供的 owner/tenant/scope。JSON 深度、单字符串大小与数字长度有边界。日志不记录令牌、完整问题、SQL 参数或上游异常原文。
 
 ## 9. 验证命令
+
+### 日志配置
+
+后端采用 **SLF4J 接口 + Logback 实现**。启动模块显式引入 `spring-boot-starter-logging`，唯一的 `logback-spring.xml` 位于 `aiops-startup/src/main/resources`；框架与业务代码继续通过 SLF4J 记录，不直接依赖 Logback 的记录 API。
+
+启动脚本默认将应用日志写入 `java-backend/.local/logs/network-aiops.log`（`AIOPS_JAVA_LOG_PATH` 可覆盖）。使用 UTF-8、默认 INFO 级别，每日/10MB 滚动并 gzip 压缩，保留 14 天、归档总量上限 512MB；清理会在启动和滚动时进行。当前活动文件不计入归档总量限制。HTTP 线程的 MDC 请求编号包含在控制台与文件日志格式中，响应头仍提供 `X-Request-ID`。
+
+后台启动默认关闭控制台副本，避免应用日志同时无限写入 `stdout.log`；旧 `stdout.log/stderr.log` 保留用于启动器/JVM 诊断。直接运行 JAR 时仍输出控制台。`AIOPS_JAVA_LOG_LEVEL` 控制根级别，`AIOPS_JAVA_CONSOLE_LOG_LEVEL` 控制控制台最低级别（后台默认 OFF，直接运行默认 TRACE）。不新增请求正文/令牌/SQL 参数日志，数据库业务审计仍独立保存。
+
+### 构建与回归
 
 ```powershell
 Set-Location 'D:\Network AIOps\java-backend'

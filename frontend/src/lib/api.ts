@@ -60,23 +60,53 @@ export class ApiClient {
     if (response.status === 401 && !this.lifetime.signal.aborted)
       this.unauthorized();
     if (response.status === 204) return undefined as T;
-    const data: unknown = await response.json().catch(() => null);
+    const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) {
+      const envelope = payload as { msg?: unknown; detail?: unknown } | null;
       const detail =
-        data && typeof data === "object" && "detail" in data
-          ? data.detail
+        envelope && typeof envelope === "object"
+          ? typeof envelope.msg === "string" && envelope.msg
+            ? envelope.msg
+            : typeof envelope.detail === "string"
+              ? envelope.detail
+              : undefined
           : undefined;
       throw new ApiError(
         response.status,
-        typeof detail === "string"
-          ? detail
-          : messages[response.status] || `请求失败（HTTP ${response.status}）`,
+        detail ||
+          messages[response.status] ||
+          `请求失败（HTTP ${response.status}）`,
       );
     }
-    if (data === null)
+    if (payload === null)
       throw new ApiError(502, "后端没有返回有效的 JSON，请检查接口代理。");
-    return data as T;
+    return unwrapEnvelope<T>(payload);
   }
+}
+
+// Java 接口统一为 {code, msg, data}，1 成功、0 失败；直连 Python 的未包装响应原样返回。
+function unwrapEnvelope<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "code" in payload &&
+    "msg" in payload &&
+    "data" in payload
+  ) {
+    const envelope = payload as {
+      code: unknown;
+      msg: unknown;
+      data: unknown;
+    };
+    if (envelope.code === 1) return envelope.data as T;
+    throw new ApiError(
+      502,
+      typeof envelope.msg === "string" && envelope.msg
+        ? envelope.msg
+        : "请求失败。",
+    );
+  }
+  return payload as T;
 }
 export function errorText(error: unknown): string {
   if (error instanceof ApiError) return error.message;

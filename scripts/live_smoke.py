@@ -9,6 +9,7 @@ import httpx
 
 from app.config import ROOT, Settings
 from scripts.demo import QUESTIONS
+from scripts.http_result import unwrap_result
 
 
 def main():
@@ -30,7 +31,7 @@ def main():
                 "/api/v1/sessions", json={"title": f"模型验收 {i + 1} · " + question[:50]}
             )
             created.raise_for_status()
-            sid = created.json()["session_id"]
+            sid = unwrap_result(created.json())["session_id"]
             sessions.append(sid)
             start = time.perf_counter()
             response = client.post(
@@ -38,7 +39,7 @@ def main():
                 json={"session_id": sid, "message": question, "timezone": "Asia/Shanghai"},
             )
             response.raise_for_status()
-            result = response.json()
+            result = unwrap_result(response.json())
             row = {
                 "case": i + 1,
                 "route": result["route"],

@@ -40,9 +40,16 @@ test("shows login errors and never opens workspace for an invalid token", async 
     "fetch",
     vi.fn(
       async () =>
-        new Response(JSON.stringify({ detail: "Authentication required" }), {
-          status: 401,
-        }),
+        new Response(
+          JSON.stringify({
+            code: 0,
+            msg: "Authentication required",
+            data: null,
+          }),
+          {
+            status: 401,
+          },
+        ),
     ),
   );
   render(<App />);

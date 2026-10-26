@@ -23,6 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {
+      "logging.file.name=target/test-logs/network-aiops.log",
+      "logging.logback.rollingpolicy.file-name-pattern=target/test-logs/archive/network-aiops.%d{yyyy-MM-dd}.%i.log.gz",
       "spring.datasource.url=jdbc:h2:mem:agent-test;DB_CLOSE_DELAY=-1",
       "workspace.agent.enabled=true",
       "workspace.auth.engineer-token=engineer-test-token-123456789012345",
@@ -122,6 +124,7 @@ class AgentIntegrationTest {
                 .andReturn()
                 .getResponse()
                 .getContentAsString())
+        .path("data")
         .path("id")
         .asText();
   }
@@ -135,15 +138,15 @@ class AgentIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"version\":0}"))
         .andExpect(status().isAccepted())
-        .andExpect(jsonPath("status").value("RUNNING"));
+        .andExpect(jsonPath("data.status").value("RUNNING"));
     String terminal = awaitAnalysis(id);
     assertThat(terminal).contains("\"SUCCEEDED\"");
     assertThat(terminal).contains("req_upstream");
     assertThat(terminal).contains("Explicit upstream integration fixture");
     mvc.perform(get("/api/v1/tickets/" + id).header("Authorization", BusinessApiTest.ENGINEER))
-        .andExpect(jsonPath("status").value("OPEN"))
-        .andExpect(jsonPath("version").value(2))
-        .andExpect(jsonPath("agent_session_id").value("upstream-session"));
+        .andExpect(jsonPath("data.status").value("OPEN"))
+        .andExpect(jsonPath("data.version").value(2))
+        .andExpect(jsonPath("data.agent_session_id").value("upstream-session"));
     assertThat(SESSIONS.get()).isEqualTo(1);
     assertThat(CHATS.get()).isEqualTo(1);
   }
@@ -180,10 +183,10 @@ class AgentIntegrationTest {
     awaitAnalysis(id);
     mvc.perform(get("/api/v1/agent/status").header("Authorization", BusinessApiTest.ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("enabled").value(true))
-        .andExpect(jsonPath("health").value("online"))
-        .andExpect(jsonPath("last_outcome").value("ok"));
-    mvc.perform(get("/api/v1/health")).andExpect(jsonPath("agent_status").value("online"));
+        .andExpect(jsonPath("data.enabled").value(true))
+        .andExpect(jsonPath("data.health").value("online"))
+        .andExpect(jsonPath("data.last_outcome").value("ok"));
+    mvc.perform(get("/api/v1/health")).andExpect(jsonPath("data.agent_status").value("online"));
   }
 
   @Test
@@ -254,10 +257,10 @@ class AgentIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"version\":0}"))
         .andExpect(status().isBadGateway())
-        .andExpect(jsonPath("code").value("agent_identity_mismatch"));
+        .andExpect(jsonPath("msg").value("Java 与 Agent 的身份或授权范围不一致，已停止调用。"));
     assertThat(CHATS.get()).isZero();
     mvc.perform(get("/api/v1/tickets/" + id).header("Authorization", BusinessApiTest.ENGINEER))
-        .andExpect(jsonPath("analysis_status").value("FAILED"));
+        .andExpect(jsonPath("data.analysis_status").value("FAILED"));
   }
 
   @Test
@@ -277,7 +280,7 @@ class AgentIntegrationTest {
     assertThat(response).doesNotContain("SECRET_RAW_UPSTREAM_ERROR");
     mvc.perform(get("/api/v1/business/overview").header("Authorization", BusinessApiTest.ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("total").value(1));
+        .andExpect(jsonPath("data.total").value(1));
   }
 
   @Test
@@ -288,6 +291,6 @@ class AgentIntegrationTest {
     mode = "invalid";
     mvc.perform(get("/api/v1/sessions").header("Authorization", BusinessApiTest.ENGINEER))
         .andExpect(status().isBadGateway())
-        .andExpect(jsonPath("code").value("agent_invalid_response"));
+        .andExpect(jsonPath("msg").value("Agent 未返回有效的 JSON 数据。"));
   }
 }

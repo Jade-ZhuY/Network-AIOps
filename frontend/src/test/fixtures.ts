@@ -103,11 +103,27 @@ export function installApiFixture(
   let revision = 0;
   let verdict = "pending";
   let caseStatus = "open";
-  const response = (data: unknown, status = 200) =>
-    new Response(status === 204 ? null : JSON.stringify(data), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+  // 与 Java 后端 Result 信封保持一致：成功 {code:1,msg:"success",data}，失败 {code:0,msg,data:null}。
+  const response = (data: unknown, status = 200) => {
+    const detail =
+      data && typeof data === "object" && "detail" in data
+        ? (data as { detail: unknown }).detail
+        : undefined;
+    return new Response(
+      status === 204
+        ? null
+        : JSON.stringify(
+            status < 400
+              ? { code: 1, msg: "success", data }
+              : {
+                  code: 0,
+                  msg: typeof detail === "string" ? detail : undefined,
+                  data: null,
+                },
+          ),
+      { status, headers: { "Content-Type": "application/json" } },
+    );
+  };
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input)
       .replace(/^https?:\/\/[^/]+/, "")

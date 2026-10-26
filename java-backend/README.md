@@ -37,6 +37,19 @@ mvn -s .mvn/settings.xml verify
 
 默认 Agent 禁用；相关接口返回明确 503，不创建模拟报告。配置真实 Agent 的方式见开发说明。现有数据库不迁移、不删除。
 
+## 日志：SLF4J + Logback
+
+- Java 代码通过 SLF4J `Logger/LoggerFactory` 记录日志，启动模块显式依赖 Spring Boot 的 `spring-boot-starter-logging`，由 Logback 输出；不额外引入第二个 SLF4J 实现。
+- `aiops-startup/src/main/resources/logback-spring.xml` 统一配置控制台和滚动文件输出；级别、编码和归档策略放在同模块的 `application.yml`。
+- 从启动脚本运行时，应用日志写入 `java-backend/.local/logs/network-aiops.log`；每日或单文件达到 10MB 时滚动，归档到 `logs/archive/*.log.gz`，保留最近 14 天，归档总量上限 512MB（当前活动文件单独计算）。
+- 可用 `AIOPS_JAVA_LOG_PATH` 指定日志目录，`AIOPS_JAVA_LOG_LEVEL` 设置级别（默认 INFO）。日志使用 UTF-8，HTTP 请求上下文中的 `requestId` 会出现在日志行中；无请求上下文时显示 internal。
+- 后台启动脚本默认关闭重复的控制台日志，`stdout.log/stderr.log` 只作启动器/JVM 诊断；直接运行 JAR 时默认保留控制台输出。需要后台控制台副本时设置 `AIOPS_JAVA_CONSOLE_LOG_LEVEL=TRACE`。
+- 不主动记录令牌、请求正文、SQL 参数或原始上游异常；业务审计仍写入 `audit_events`，不以文件日志替代。现有异常日志保持脱敏。
+
+```powershell
+Get-Content '.\java-backend\.local\logs\network-aiops.log' -Tail 50 -Wait
+```
+
 ## 异步分析与运行状态（借鉴 Apache HertzBeat）
 
 - 发起分析 `POST /api/v1/tickets/{id}/analyses` 返回 202 与 RUNNING 记录；长调用在独立有界线程池执行（`workspace.analysis.max-concurrent`，默认 2；`queue-capacity`，默认 50，可用 `AIOPS_ANALYSIS_MAX_CONCURRENT` / `AIOPS_ANALYSIS_QUEUE_CAPACITY` 覆盖）。满载返回 429，不无限排队。

@@ -23,6 +23,7 @@ from app.security.auth import principal_from_token
 from app.storage.backends import MySQLBackend
 from app.storage.checkpoint import postgres_resources
 from app.tools.sql_readonly import QueryService
+from scripts.http_result import unwrap_result
 
 
 class TimingProbe(AsyncCallbackHandler):
@@ -152,7 +153,7 @@ async def run(args):
             headers={"Authorization": f"Bearer {token}"},
         )
         response.raise_for_status()
-        original = response.json()
+        original = unwrap_result(response.json())
     async with postgres_resources(settings) as (_, saver):
         config = {
             "configurable": {

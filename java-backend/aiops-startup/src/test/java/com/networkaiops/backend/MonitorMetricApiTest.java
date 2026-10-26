@@ -18,6 +18,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 @SpringBootTest(
     properties = {
+      "logging.file.name=target/test-logs/network-aiops.log",
+      "logging.logback.rollingpolicy.file-name-pattern=target/test-logs/archive/network-aiops.%d{yyyy-MM-dd}.%i.log.gz",
       "spring.datasource.url=jdbc:h2:mem:business-test;DB_CLOSE_DELAY=-1",
       "workspace.agent.enabled=false",
       "workspace.auth.engineer-token=engineer-test-token-123456789012345",
@@ -57,14 +59,18 @@ class MonitorMetricApiTest {
   void templatesAreServedFromYamlDefinitions() throws Exception {
     mvc.perform(get("/api/v1/monitor-templates").header("Authorization", ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(3))
-        .andExpect(jsonPath("$[?(@.type == 'switch')].name").value("交换机"));
+        .andExpect(jsonPath("code").value(1))
+        .andExpect(jsonPath("msg").value("success"))
+        .andExpect(jsonPath("data.length()").value(3))
+        .andExpect(jsonPath("data[?(@.type == 'switch')].name").value("交换机"));
     mvc.perform(get("/api/v1/monitor-templates/switch").header("Authorization", ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.metrics.length()").value(3))
-        .andExpect(jsonPath("$.metrics[?(@.id == 'latency_ms')].warning").value(50.0));
+        .andExpect(jsonPath("data.metrics.length()").value(3))
+        .andExpect(jsonPath("data.metrics[?(@.id == 'latency_ms')].warning").value(50.0));
     mvc.perform(get("/api/v1/monitor-templates/unknown").header("Authorization", ENGINEER))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("code").value(0))
+        .andExpect(jsonPath("msg").isNotEmpty());
   }
 
   @Test
@@ -76,7 +82,7 @@ class MonitorMetricApiTest {
     mvc.perform(
             get("/api/v1/monitors/" + created.get("id").asText()).header("Authorization", ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.hostname").value("core-sw-1"));
+        .andExpect(jsonPath("data.hostname").value("core-sw-1"));
 
     mvc.perform(
             put("/api/v1/monitors/" + created.get("id").asText())
@@ -88,8 +94,8 @@ class MonitorMetricApiTest {
                      "labels":["core","north"],"description":"核心层"}
                     """))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.version").value(1))
-        .andExpect(jsonPath("$.labels.length()").value(2));
+        .andExpect(jsonPath("data.version").value(1))
+        .andExpect(jsonPath("data.labels.length()").value(2));
 
     Integer audited =
         jdbc.queryForObject(
@@ -142,9 +148,10 @@ class MonitorMetricApiTest {
     mvc.perform(get("/api/v1/metric-definitions").header("Authorization", ENGINEER))
         .andExpect(status().isOk())
         .andExpect(
-            jsonPath("$.definitions[?(@.id == 'packet_loss_pct')].device_types.length()").value(2))
+            jsonPath("data.definitions[?(@.id == 'packet_loss_pct')].device_types.length()")
+                .value(2))
         .andExpect(
-            jsonPath("$.definitions[?(@.id == 'latency_ms')].device_types.length()").value(3));
+            jsonPath("data.definitions[?(@.id == 'latency_ms')].device_types.length()").value(3));
   }
 
   @Test
@@ -157,12 +164,12 @@ class MonitorMetricApiTest {
                 .queryParam("end", "2026-10-02T00:00:00Z")
                 .header("Authorization", ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.metric_id").value("latency_ms"))
-        .andExpect(jsonPath("$.no_data").value(false))
-        .andExpect(jsonPath("$.points.length()").value(3))
-        .andExpect(jsonPath("$.points[0].value").value(12.5))
-        .andExpect(jsonPath("$.points[0].interface_name").value("eth0"))
-        .andExpect(jsonPath("$.points[2].interface_name").doesNotExist());
+        .andExpect(jsonPath("data.metric_id").value("latency_ms"))
+        .andExpect(jsonPath("data.no_data").value(false))
+        .andExpect(jsonPath("data.points.length()").value(3))
+        .andExpect(jsonPath("data.points[0].value").value(12.5))
+        .andExpect(jsonPath("data.points[0].interface_name").value("eth0"))
+        .andExpect(jsonPath("data.points[2].interface_name").doesNotExist());
 
     mvc.perform(
             get("/api/v1/monitors/" + id + "/metrics/packet_loss_pct/series")
@@ -170,8 +177,8 @@ class MonitorMetricApiTest {
                 .queryParam("end", "2026-10-02T00:00:00Z")
                 .header("Authorization", ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.points.length()").value(2))
-        .andExpect(jsonPath("$.no_data").value(false));
+        .andExpect(jsonPath("data.points.length()").value(2))
+        .andExpect(jsonPath("data.no_data").value(false));
 
     mvc.perform(
             get("/api/v1/monitors/" + id + "/metrics/latency_ms/series")
@@ -179,8 +186,8 @@ class MonitorMetricApiTest {
                 .queryParam("end", "2025-01-02T00:00:00Z")
                 .header("Authorization", ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.no_data").value(true))
-        .andExpect(jsonPath("$.points.length()").value(0));
+        .andExpect(jsonPath("data.no_data").value(true))
+        .andExpect(jsonPath("data.points.length()").value(0));
   }
 
   @Test
@@ -209,7 +216,7 @@ class MonitorMetricApiTest {
                 .queryParam("interface", "eth0")
                 .header("Authorization", ENGINEER))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.points.length()").value(2));
+        .andExpect(jsonPath("data.points.length()").value(2));
   }
 
   private JsonNode createMonitor(String hostname) throws Exception {
@@ -226,6 +233,6 @@ class MonitorMetricApiTest {
                             .formatted(hostname)))
             .andExpect(status().isCreated())
             .andReturn();
-    return mapper.readTree(result.getResponse().getContentAsString());
+    return mapper.readTree(result.getResponse().getContentAsString()).path("data");
   }
 }

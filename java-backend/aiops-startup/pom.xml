@@ -11,6 +11,10 @@
   <description>The only executable application: HTTP endpoints, configuration and module assembly.</description>
   <dependencies>
     <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-logging</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.networkaiops</groupId>
       <artifactId>aiops-common-core</artifactId>
     </dependency>

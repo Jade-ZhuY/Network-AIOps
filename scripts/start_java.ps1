@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $backend = Join-Path $root 'java-backend'
 $local = Join-Path $backend '.local'
+$logPath = if ($env:AIOPS_JAVA_LOG_PATH) { $env:AIOPS_JAVA_LOG_PATH } else { Join-Path $local 'logs' }
 $jar = Join-Path $backend 'aiops-startup\target\aiops-startup-0.1.0.jar'
 New-Item -ItemType Directory -Path $local -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $backend 'data') -Force | Out-Null
@@ -55,6 +56,9 @@ $values = @{
     AIOPS_AGENT_ENABLED=([bool]$EnableAgent).ToString().ToLowerInvariant()
     AIOPS_AGENT_BASE_URL=$AgentBaseUrl
     AIOPS_FRONTEND_PATH=(Join-Path $root 'app\web\dist')
+    AIOPS_JAVA_LOG_PATH=$logPath
+    # The hidden process logs through Logback's rolling file, not an unbounded duplicate stdout.
+    AIOPS_JAVA_CONSOLE_LOG_LEVEL=$(if ($env:AIOPS_JAVA_CONSOLE_LOG_LEVEL) { $env:AIOPS_JAVA_CONSOLE_LOG_LEVEL } else { 'OFF' })
 }
 $previous=@{}
 try {
@@ -69,10 +73,11 @@ for ($i=0; $i -lt 40; $i++) {
     if ($process.HasExited) { throw "Java exited. Inspect $local\stdout.log and stderr.log (no credentials are printed by this launcher)." }
     try {
         $health=Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/v1/health" -TimeoutSec 2
-        if ($health.status -eq 'ok') {
+        if ($health.code -eq 1 -and $health.data.status -eq 'ok' -and $health.data.backend -eq 'java') {
             Write-Output "Java business is ready: http://127.0.0.1:$Port/"
             Write-Output "PID: $($process.Id); Agent enabled: $([bool]$EnableAgent)"
             Write-Output "Credentials: $tokenFile ($credentialSource)"
+            Write-Output "Application log: $(Join-Path $logPath 'network-aiops.log')"
             exit 0
         }
     } catch { Start-Sleep -Milliseconds 500 }

@@ -1,11 +1,10 @@
 package com.networkaiops.backend.controller;
 
-import com.networkaiops.backend.business.ticket.Analysis;
 import com.networkaiops.backend.business.ticket.TicketAnalysisService;
 import com.networkaiops.backend.common.identity.WorkspacePrincipal;
+import com.networkaiops.backend.common.web.Result;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
-import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,19 +22,18 @@ public class TicketAnalysisController {
   }
 
   @GetMapping
-  Map<String, List<Analysis>> list(
-      @PathVariable String id, @AuthenticationPrincipal WorkspacePrincipal user) {
-    return Map.of("analyses", service.list(id, user));
+  Result list(@PathVariable String id, @AuthenticationPrincipal WorkspacePrincipal user) {
+    return Result.success(Map.of("analyses", service.list(id, user)));
   }
 
   @PostMapping
-  ResponseEntity<Analysis> analyze(
+  ResponseEntity<Result> analyze(
       @PathVariable String id,
       @Valid @RequestBody AnalyzeRequest request,
       @AuthenticationPrincipal WorkspacePrincipal user,
       @RequestHeader("Authorization") String authorization) {
     // Accepted: the RUNNING record is persisted and execution continues on the analysis pool.
     return ResponseEntity.accepted()
-        .body(service.start(id, request.version(), user, authorization));
+        .body(Result.success(service.start(id, request.version(), user, authorization)));
   }
 }

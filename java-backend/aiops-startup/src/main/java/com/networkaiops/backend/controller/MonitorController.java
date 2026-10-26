@@ -1,12 +1,11 @@
 package com.networkaiops.backend.controller;
 
-import com.networkaiops.backend.business.common.Page;
 import com.networkaiops.backend.business.monitor.CreateMonitorRequest;
 import com.networkaiops.backend.business.monitor.MonitorService;
 import com.networkaiops.backend.business.monitor.MonitorStatus;
-import com.networkaiops.backend.business.monitor.MonitorView;
 import com.networkaiops.backend.business.monitor.UpdateMonitorRequest;
 import com.networkaiops.backend.common.identity.WorkspacePrincipal;
+import com.networkaiops.backend.common.web.Result;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -27,34 +26,34 @@ public class MonitorController {
   }
 
   @GetMapping
-  Page<MonitorView> list(
+  Result list(
       @AuthenticationPrincipal WorkspacePrincipal user,
       @RequestParam(defaultValue = "") @Size(max = 100) String q,
       @RequestParam(required = false) String type,
       @RequestParam(required = false) MonitorStatus status,
       @RequestParam(defaultValue = "0") @Min(0) int offset,
       @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
-    return service.list(user, q, type, status, offset, limit);
+    return Result.success(service.list(user, q, type, status, offset, limit));
   }
 
   @PostMapping
-  ResponseEntity<MonitorView> create(
+  ResponseEntity<Result> create(
       @Valid @RequestBody CreateMonitorRequest request,
       @AuthenticationPrincipal WorkspacePrincipal user) {
-    return ResponseEntity.status(201).body(service.create(request, user));
+    return ResponseEntity.status(201).body(Result.success(service.create(request, user)));
   }
 
   @GetMapping("/{id}")
-  MonitorView get(@PathVariable String id, @AuthenticationPrincipal WorkspacePrincipal user) {
-    return service.get(id, user);
+  Result get(@PathVariable String id, @AuthenticationPrincipal WorkspacePrincipal user) {
+    return Result.success(service.get(id, user));
   }
 
   @PutMapping("/{id}")
-  MonitorView update(
+  Result update(
       @PathVariable String id,
       @Valid @RequestBody UpdateMonitorRequest request,
       @AuthenticationPrincipal WorkspacePrincipal user) {
-    return service.update(id, request, user);
+    return Result.success(service.update(id, request, user));
   }
 
   @DeleteMapping("/{id}")

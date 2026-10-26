@@ -5,6 +5,7 @@ import com.networkaiops.backend.agent.client.AgentClient;
 import com.networkaiops.backend.business.audit.AuditRepository;
 import com.networkaiops.backend.common.exception.BusinessException;
 import com.networkaiops.backend.common.identity.WorkspacePrincipal;
+import com.networkaiops.backend.common.web.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
@@ -44,7 +45,7 @@ public class AgentRelayController {
     "/governance/cases",
     "/governance/cases/{cid}"
   })
-  ResponseEntity<JsonNode> get(
+  ResponseEntity<Result> get(
       HttpServletRequest request, @AuthenticationPrincipal WorkspacePrincipal user) {
     return relay(request, user, null);
   }
@@ -60,7 +61,7 @@ public class AgentRelayController {
     "/governance/capture/{rid}",
     "/knowledge/reindex"
   })
-  ResponseEntity<JsonNode> post(
+  ResponseEntity<Result> post(
       HttpServletRequest request,
       @AuthenticationPrincipal WorkspacePrincipal user,
       @RequestBody(required = false) JsonNode body) {
@@ -68,7 +69,7 @@ public class AgentRelayController {
   }
 
   @PutMapping("/requests/{rid}/queries/{qid}/review")
-  ResponseEntity<JsonNode> put(
+  ResponseEntity<Result> put(
       HttpServletRequest request,
       @AuthenticationPrincipal WorkspacePrincipal user,
       @RequestBody JsonNode body) {
@@ -76,7 +77,7 @@ public class AgentRelayController {
   }
 
   @PatchMapping("/governance/cases/{cid}")
-  ResponseEntity<JsonNode> patch(
+  ResponseEntity<Result> patch(
       HttpServletRequest request,
       @AuthenticationPrincipal WorkspacePrincipal user,
       @RequestBody JsonNode body) {
@@ -84,13 +85,13 @@ public class AgentRelayController {
   }
 
   @DeleteMapping({"/sessions/{sid}", "/knowledge/documents/{did}", "/metrics/reviewed/{mid}"})
-  ResponseEntity<JsonNode> delete(
+  ResponseEntity<Result> delete(
       HttpServletRequest request, @AuthenticationPrincipal WorkspacePrincipal user) {
     return relay(request, user, null);
   }
 
   @PostMapping(value = "/knowledge/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  ResponseEntity<JsonNode> upload(
+  ResponseEntity<Result> upload(
       HttpServletRequest request,
       @AuthenticationPrincipal WorkspacePrincipal user,
       @RequestPart MultipartFile file,
@@ -130,7 +131,7 @@ public class AgentRelayController {
               token,
               MediaType.MULTIPART_FORM_DATA);
       audit.record(user, "KNOWLEDGE_DOCUMENT_UPLOADED", null, "completed", note);
-      return response;
+      return envelope(response);
     } catch (BusinessException failure) {
       audit.record(
           user, "KNOWLEDGE_DOCUMENT_UPLOADED", null, "failed", "error_code:" + failure.getReason());
@@ -138,7 +139,7 @@ public class AgentRelayController {
     }
   }
 
-  private ResponseEntity<JsonNode> relay(
+  private ResponseEntity<Result> relay(
       HttpServletRequest request, WorkspacePrincipal user, Object body) {
     String path = request.getRequestURI();
     String knowledgeAction = null;
@@ -149,7 +150,7 @@ public class AgentRelayController {
     if (request.getContentLengthLong() > 1024 * 1024)
       throw new BusinessException(413, "request_too_large", "请求内容超过 1 MB。");
     String token = request.getHeader("Authorization");
-    if (knowledgeAction == null) return forward(request, user, body, path, token);
+    if (knowledgeAction == null) return envelope(forward(request, user, body, path, token));
     // Identity checks stay inside the audited span: a mutation blocked by an outage or
     // mismatch is still a knowledge-change attempt worth tracing.
     try {
@@ -160,11 +161,22 @@ public class AgentRelayController {
           null,
           "completed",
           knowledgeNote(request.getMethod(), request.getRequestURI()));
-      return response;
+      return envelope(response);
     } catch (BusinessException failure) {
       audit.record(user, knowledgeAction, null, "failed", "error_code:" + failure.getReason());
       throw failure;
     }
+  }
+
+  /**
+   * AgentClient only returns 2xx bodies (it maps upstream failures to BusinessException), so every
+   * relayed payload is a success envelope; upstream 204 stays an empty 204.
+   */
+  private static ResponseEntity<Result> envelope(ResponseEntity<JsonNode> response) {
+    if (response.getBody() == null) return ResponseEntity.status(response.getStatusCode()).build();
+    return ResponseEntity.status(response.getStatusCode())
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(Result.success(response.getBody()));
   }
 
   private ResponseEntity<JsonNode> forward(

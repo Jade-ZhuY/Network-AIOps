@@ -51,9 +51,11 @@ class ModuleAssemblyTest {
 
   @Test
   void applicationConfigurationIsOwnedOnlyByStartup() throws Exception {
-    var resources = Collections.list(getClass().getClassLoader().getResources("application.yml"));
-    assertThat(resources).hasSize(1);
-    assertThat(resources.getFirst().toString()).contains("aiops-startup");
+    for (String name : new String[] {"application.yml", "logback-spring.xml"}) {
+      var resources = Collections.list(getClass().getClassLoader().getResources(name));
+      assertThat(resources).hasSize(1);
+      assertThat(resources.getFirst().toString()).contains("aiops-startup");
+    }
   }
 
   private static void assertArtifact(Class<?> type, String module) {

@@ -37,8 +37,8 @@ aiops-startup
 
 ### aiops-common-core
 
-- 包：`com.networkaiops.backend.common.context/exception/identity`。
-- 内容：业务异常、错误响应契约、身份与授权范围记录、纯 Java 请求上下文。
+- 包：`com.networkaiops.backend.common.context/exception/identity/web`。
+- 内容：业务异常、统一响应 `Result`（`code/msg/data`，1 成功、0 失败）、身份与授权范围记录、纯 Java 请求上下文。`Result` 按普通类 + Lombok `@Data` 实现，不使用泛型；Lombok 仅用于编译期生成访问器等方法，不进入运行时。
 - 没有 Spring、Servlet、Jackson、JDBC 等生产依赖；`jdeps` 检查仅依赖 `java.base`。
 - JUnit 仅用于测试，不进入生产运行时。
 

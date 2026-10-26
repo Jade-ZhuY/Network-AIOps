@@ -1,8 +1,8 @@
 package com.networkaiops.backend.common.spring.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networkaiops.backend.common.exception.ErrorResponse;
 import com.networkaiops.backend.common.spring.security.BearerTokenFilter;
+import com.networkaiops.backend.common.web.Result;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -55,17 +55,14 @@ public class SecurityConfig {
                           response.setStatus(401);
                           response.setHeader("WWW-Authenticate", "Bearer");
                           response.setContentType("application/json;charset=UTF-8");
-                          mapper.writeValue(
-                              response.getOutputStream(),
-                              ErrorResponse.of("请先登录工作台。", "authentication_required"));
+                          mapper.writeValue(response.getOutputStream(), Result.error("请先登录工作台。"));
                         })
                     .accessDeniedHandler(
                         (request, response, error) -> {
                           response.setStatus(403);
                           response.setContentType("application/json;charset=UTF-8");
                           mapper.writeValue(
-                              response.getOutputStream(),
-                              ErrorResponse.of("当前身份没有此操作权限。", "forbidden"));
+                              response.getOutputStream(), Result.error("当前身份没有此操作权限。"));
                         }))
         .addFilterBefore(
             new BearerTokenFilter(properties, mapper), UsernamePasswordAuthenticationFilter.class)

@@ -2,6 +2,8 @@
 
 本地基址 `http://127.0.0.1:8080`。除根页面、静态资源及 health/OpenAPI 外，以下会话与知识接口需要 `Authorization: Bearer <应用令牌>`。工程师/管理员令牌由服务端 `.env` 配置，不接受客户端 owner、tenant、scope 或 thread_id。
 
+本文描述 Python FastAPI 的原始协议。经 Java `18081` 入口访问时，非 204 响应额外包装为 `{code,msg,data}`（1 成功、0 失败），本文所述业务响应位于 `data` 中；错误提示位于 `msg`，HTTP 状态保持原语义。完整 Java 契约见 [Java 后端说明](java-backend.md#统一响应结果)。
+
 ## 依赖与身份
 
 - `GET /health`、`GET /api/v1/health`：受限 SQL、已加载知识库、PostgreSQL 表就绪检查；200 ready / 503 degraded。返回 model、database、checkpoint、embedding、演示时钟，不返回连接串或凭据。LLM 在进程内成功调用前为 configured_not_probed，成功后为 verified_this_process，**不是持续实时探活保证**。
